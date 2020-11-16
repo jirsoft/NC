@@ -1,10 +1,14 @@
+#MMDEBUG ON
 OPTION EXPLICIT
 OPTION DEFAULT NONE
 OPTION BASE 0
 
-CONST VERSION = "0.2"
+#INCLUDE "VIEWER.INC"
+#INCLUDE "ACTION.INC"
 
-CONST FILECHARS.NC = "abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ0123456789()_-."
+CONST VERSION = "0.3"
+
+CONST FILECHARS.NC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()_-."
 
 CONST MAX_ITEMS.NC = 500 'max number of items in pane
 CONST MAX_ROWS.NC = 32   'max row in list display
@@ -19,6 +23,9 @@ DIM INTEGER COUNT.NC(1)         'number of items in pane
 DIM STRING PATH.NC(1)           'current path in pane
 DIM STRING ITEM.NC(1, MAX_ITEMS.NC) 'items storage
 
+DIM INTEGER EXT_ERR.NC = -1 'external error (VIEWER, ACTION...)
+                            '-1=no EXT, 0=OK, >0 error from EXT
+
 DIM INTEGER ACTIVE.NC = 0 '0 cursor on left
 
 CONST CURSOR_TIME = 300   'NCinput cursor blink speed in ms
@@ -30,7 +37,7 @@ DIM STRING STR.NC         'temporary string var
 
 NCinit
 
-NCchangeDir(0,"A:/")
+NCchangeDir(0,"A:/HELP/MAR/")
 NCchangeDir(1,"A:/")
 NCdrawCL(PATH.NC(ACTIVE.NC))
 
@@ -64,7 +71,7 @@ SUB NCkey
         NCdrawCL(PATH.NC(ACTIVE.NC))
         NCcursor(ACTIVE.NC,1)
       ELSE
-        NCaction(PATH.NC(ACTIVE.NC), SELECTED.NC)
+        NCaction(PATH.NC(ACTIVE.NC), MID$(SELECTED.NC,2))
       ENDIF
 
     CASE 145  'F1
@@ -106,7 +113,7 @@ SUB NCkey
           STR.NC = NCinput("COPY AS","New name for '"+MID$(SELECTED.NC,2)+"'",NCnewName(PATH.NC(1-ACTIVE.NC),MID$(SELECTED.NC,2)),FILECHARS.NC)
           IF STR.NC <> MID$(SELECTED.NC,2) AND STR.NC <> "" THEN
             IF LEFT$(SELECTED.NC,1)="F" THEN
-              NCcopyFile(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2),PATH.NC(1-ACTIVE.NC)+STR.NC,1)     
+              NCcopyFile(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2),PATH.NC(1-ACTIVE.NC)+STR.NC,0)    
             ELSE
               NCcopyDir(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2)+"/",PATH.NC(1-ACTIVE.NC)+STR.NC+"/",1)     
             ENDIF
@@ -205,7 +212,9 @@ SUB NCkey
       NCchangeDir(1,PATH.NC(1))
       NCcursor(ACTIVE.NC,1)
 
-
+    CASE ASC("S")
+      SAVE IMAGE "ScreenShot.bmp"
+      
     CASE 134  'HOME
       NChome
       
@@ -389,6 +398,7 @@ SUB NCrenameItem
   'rename item
 
   STR.NC = NCinput("RENAME ITEM", "New name:",NCnewName(CUR_PATH.NC,MID$(SELECTED.NC,2)), FILECHARS.NC)
+
   ON ERROR SKIP
   RENAME CUR_PATH.NC+MID$(SELECTED.NC,2) AS CUR_PATH.NC+STR.NC
   IF MM.ERRNO THEN 
@@ -403,7 +413,7 @@ END SUB
 SUB NCcopyFile(source AS STRING, dest AS STRING, noWarning AS INTEGER)
   'copy file
 
-  IF NOT noWarning THEN
+  IF noWarning THEN
     IF NOT NCquestion("COPY FILE","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN         
       EXIT SUB
     ENDIF
@@ -444,8 +454,22 @@ END SUB
 SUB NCaction(p AS STRING, s AS STRING)
   'ENTER pressed on file (skeleton)
 
-  SELECT CASE UCASE$(RIGHT$(s,4))
-    CASE ".BAS"
+  LOCAL STRING extAction, ex = UCASE$(NCgetExtension(s))
+  EXT_ERR.NC = -1
+
+  SELECT CASE ex
+    CASE "BAS"
+
+    CASE ELSE
+      extAction = "EXTaction" + ex
+      ON ERROR SKIP
+      CALL extAction, p+s
+      IF EXT_ERR.NC < 0 THEN
+        IF MM.ERRNO>0 THEN 
+          NCwarning("ACTION " + ex,"External action not available")
+        ENDIF
+      ENDIF
+
   END SELECT
 END SUB
    
@@ -1190,6 +1214,7 @@ SUB NCviewHEX(filePath AS STRING)
   NCdrawMenu
 END SUB
 
+
 SUB NCviewTXT(filePath AS STRING)
   'simple text viewer
 
@@ -1267,21 +1292,33 @@ END SUB
 SUB NCview
   'parrent for viewer
 
-  LOCAL STRING k
+  LOCAL STRING k, ex = UCASE$(NCgetExtension(MID$(SELECTED.NC,2))), exViewer
   CONST en = CHR$(27)
 
-  SELECT CASE UCASE$(NCgetExtension(MID$(SELECTED.NC,2)))
+  SELECT CASE ex
     CASE "TXT", "BAS", "BAK", "INC", "FNT"
       'text view
       NCviewTXT(CUR_PATH.NC + MID$(SELECTED.NC,2))
       
     CASE "BMP", "PNG", "BMP", "JPG"
       'image view
-      NCwarning("IMAGE VIEW", "Still no viewer...")
+      NCwarning("IMAGE VIEW", "Viewer not available yet...")
 
     CASE ELSE
-      'HEX view
-      NCviewHEX(CUR_PATH.NC + MID$(SELECTED.NC,2))
+      exViewer = "EXTview" + ex
+      EXT_ERR.NC = -1
+      ON ERROR SKIP
+      CALL exViewer, CUR_PATH.NC + MID$(SELECTED.NC,2)
+      IF EXT_ERR.NC < 0 THEN
+        'fallback to HEX view
+        NCviewHEX(CUR_PATH.NC + MID$(SELECTED.NC,2))
+      ELSE
+        'external viewer was available
+        NCredrawPane(0)
+        NCredrawPane(1)  
+        NCcursor(ACTIVE.NC,1)
+        NCdrawMenu
+      ENDIF
 
   END SELECT
 END SUB
