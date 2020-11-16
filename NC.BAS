@@ -37,7 +37,7 @@ DIM STRING STR.NC         'temporary string var
 
 NCinit
 
-NCchangeDir(0,"A:/HELP/MAR/")
+NCchangeDir(0,"A:/")
 NCchangeDir(1,"A:/")
 NCdrawCL(PATH.NC(ACTIVE.NC))
 
@@ -143,17 +143,10 @@ SUB NCkey
           IF LEFT$(SELECTED.NC,1)="D" THEN
             'MOVE DIR
             IF NCquestion("MOVE DIR", "Move '"+MID$(SELECTED.NC,2)+"' to '"+PATH.NC(1-ACTIVE.NC)+"'?") THEN
-              'NCcopyDir(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2)+"/",PATH.NC(1-ACTIVE.NC)+MID$(SELECTED.NC,2)+"/")     
-              'NCdeleteDir(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2))
-              'IF INSTR(PATH.NC(0),PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2))>0 THEN
-              '  PATH.NC(0) = NCparrent(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2))
-              'ENDIF
-              'IF INSTR(PATH.NC(1),PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2))>0 THEN
-              '  PATH.NC(1) = NCparrent(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2))
-              'ENDIF
-              'NCchangeDir(0,PATH.NC(0))
-              'NCchangeDir(1,PATH.NC(1))
-              'NCcursor(ACTIVE.NC,1)
+              STR.NC = SELECTED.NC
+              NCcopyDir(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2)+"/",PATH.NC(1-ACTIVE.NC)+MID$(SELECTED.NC,2)+"/")     
+              SELECTED.NC = STR.NC
+              NCdelete(1)                           
             ENDIF
             
           ELSE
@@ -258,32 +251,34 @@ FUNCTION NCparrent(p AS STRING) AS STRING
   LOOP
 END FUNCTION
 
-SUB NCdelete
+SUB NCdelete(noWarning AS INTEGER)
   'delete item
 
-  IF NCquestion("DELETE", "Delete '" + MID$(SELECTED.NC,2) + "', really proceed?") THEN
-    IF LEFT$(SELECTED.NC,1)="D" THEN
-      ON ERROR SKIP
-      RMDIR CUR_PATH.NC+MID$(SELECTED.NC,2)
-      IF MM.ERRNO THEN 
-        NCdeleteDir(CUR_PATH.NC+MID$(SELECTED.NC,2))
-        IF INSTR(PATH.NC(0),CUR_PATH.NC+MID$(SELECTED.NC,2))>0 THEN
-          PATH.NC(0) = NCparrent(CUR_PATH.NC+MID$(SELECTED.NC,2))
-        ENDIF
-        IF INSTR(PATH.NC(1),CUR_PATH.NC+MID$(SELECTED.NC,2))>0 THEN
-          PATH.NC(1) = NCparrent(CUR_PATH.NC+MID$(SELECTED.NC,2))
-        ENDIF
-
-      ENDIF
-    ELSE
-      ON ERROR SKIP
-      KILL CUR_PATH.NC+MID$(SELECTED.NC,2)
-      IF MM.ERRNO THEN NCerror("DELETE '" + MID$(SELECTED.NC,2) + "' ERROR")
+  IF NOT noWarning THEN
+    IF NOT NCquestion("DELETE", "Delete '" + MID$(SELECTED.NC,2) + "', really proceed?") THEN
+      EXIT SUB
     ENDIF
-    NCchangeDir(0,PATH.NC(0))
-    NCchangeDir(1,PATH.NC(1))
-    NCcursor(ACTIVE.NC,1)
   ENDIF
+  IF LEFT$(SELECTED.NC,1)="D" THEN
+    ON ERROR SKIP
+    RMDIR CUR_PATH.NC+MID$(SELECTED.NC,2)
+    IF MM.ERRNO THEN 
+      NCdeleteDir(CUR_PATH.NC+MID$(SELECTED.NC,2))
+      IF INSTR(PATH.NC(0),CUR_PATH.NC+MID$(SELECTED.NC,2))>0 THEN
+        PATH.NC(0) = NCparrent(CUR_PATH.NC+MID$(SELECTED.NC,2))
+      ENDIF
+      IF INSTR(PATH.NC(1),CUR_PATH.NC+MID$(SELECTED.NC,2))>0 THEN
+        PATH.NC(1) = NCparrent(CUR_PATH.NC+MID$(SELECTED.NC,2))
+      ENDIF
+    ENDIF
+  ELSE
+    ON ERROR SKIP
+    KILL CUR_PATH.NC+MID$(SELECTED.NC,2)
+    IF MM.ERRNO THEN NCerror("DELETE '" + MID$(SELECTED.NC,2) + "' ERROR")
+  ENDIF
+  NCchangeDir(0,PATH.NC(0))
+  NCchangeDir(1,PATH.NC(1))
+  NCcursor(ACTIVE.NC,1)
 END SUB
 
 SUB NChelp
@@ -740,6 +735,7 @@ FUNCTION NCquestion(title AS STRING, txt AS STRING) AS INTEGER
   DO
     k = INKEY$
   LOOP WHILE k<>CHR$(27) AND k<>CHR$(10) 
+  DO:LOOP WHILE INKEY$<>""
   SPRITE HIDE #1
   SPRITE CLOSE #1
   NCquestion = (k=CHR$(10))
