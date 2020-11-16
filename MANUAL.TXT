@@ -1,0 +1,54 @@
+ Napoleon Commander
+
+ This application is simple dual PANE file commander, inspired by Norton (Volkov, ,,,) Commanders.
+ It has just basic functionality, but it can maybe help...
+
+ 1. PANES
+ App is controlled by 2 panes (left and right), any of them can be switched into active state with
+ TAB, Active one has "cursor" (inverse line of text) and header (inverse again). On active pane can
+ be moved cursor by keys UP/DOWN (1 line) or HOME/END (first/last line).
+ Cursor then marks ACTIVE ITEM. RED cursor means HIDDEN file (begins with '.'), hidden files and 
+ folder can be shown/hidden with key 'H'.
+
+ 2. ACTIVE ITEM
+ With active item can you do several ACTIONS, some of them depends on differenc between panes. Most
+ of the actions is invoked by F-keys, but some of them are also on "normal" keys (see Shortcuts).
+
+ 3. ACTIONS
+ Source for actions is marked item on active pane, destination is then inactive pane. 
+  
+  COPY   Copies file or folder to new directory. When is on both panes the same directory, copied
+         item needs to be named diffrently, app "AI" propose new name for you.
+
+  MOVE   Same as COPY, but source item is deleted after operation. Folder move temporary disabled.
+
+  DELETE Deletes file or folder, the folder doesn't have to be empty. VERY DANGEROUS ACTION!!!
+
+  L=R    Duplicate view from active to inactive pane.
+
+
+
+
+
+
+
+
+ For same actions, just source file or folder is needed.
+   
+  GET SIZE  Calculate size and number of items for folder, for file just returns size.
+ 
+  VIEWER    Shows file as text or HEX, image viewer is missing yet. Thanks great Peter Mather's
+            work - in this case SUBs CALL, it can be later extended for external viewers based on
+            file extension. Doesn't work for folders, but is not limited by file size (maybe just
+            with speed/slowness...)
+
+  EDITOR    Extension of the VIEWER, not done (yet?).
+
+  MAKE DIR  Create new folder in active directory.
+
+
+ That's it, nothing more to show. If you got tired, simply press F10 and the app will quit...
+
+                                                                                 JirSoft@jirsoft.eu 
+
+  
