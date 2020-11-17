@@ -2,11 +2,12 @@
 OPTION EXPLICIT
 OPTION DEFAULT NONE
 OPTION BASE 0
+MODE 1,8
 
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
-CONST VERSION = "0.3"
+CONST VERSION = "v0.31"
 
 CONST FILECHARS.NC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()_-."
 
@@ -190,7 +191,10 @@ SUB NCkey
 
     CASE 155  'F11
       IF EN_MENU.NC(10) THEN
-        NCwarning("WARNING","Pressed F11")
+        IF LEFT$(SELECTED.NC,1) = "F" THEN
+          NCcompress(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2),PATH.NC(1-ACTIVE.NC))
+          'NCchangeDir(1-ACTIVE.NC,PATH.NC(1-ACTIVE.NC))
+        ENDIF
       ENDIF
 
     CASE 156  'F12
@@ -200,6 +204,7 @@ SUB NCkey
 
     CASE ASC("H"), ASC("h")
       HIDDEN.NC = 1 - HIDDEN.NC
+      NCdrawCL(PATH.NC(ACTIVE.NC))
       NCdrawMenu
       NCchangeDir(0,PATH.NC(0))
       NCchangeDir(1,PATH.NC(1))
@@ -453,7 +458,45 @@ SUB NCaction(p AS STRING, s AS STRING)
   EXT_ERR.NC = -1
 
   SELECT CASE ex
-    CASE "BAS"
+    CASE "BMP"
+      CLS
+      LOAD BMP p+s
+      DO:LOOP WHILE INKEY$=""
+      DO:LOOP WHILE INKEY$<>""
+      NCredrawPane(0)
+      NCredrawPane(1)  
+      NCcursor(ACTIVE.NC,1)
+      NCdrawMenu
+      
+    CASE "JPG"
+      CLS
+      LOAD JPG p+s
+      DO:LOOP WHILE INKEY$=""
+      DO:LOOP WHILE INKEY$<>""
+      NCredrawPane(0)
+      NCredrawPane(1)  
+      NCcursor(ACTIVE.NC,1)
+      NCdrawMenu
+
+    CASE "PNG"
+      CLS
+      LOAD PNG p+s
+      DO:LOOP WHILE INKEY$=""
+      DO:LOOP WHILE INKEY$<>""
+      NCredrawPane(0)
+      NCredrawPane(1)  
+      NCcursor(ACTIVE.NC,1)
+      NCdrawMenu
+
+    CASE "GIF"
+      CLS
+      LOAD GIF p+s
+      DO:LOOP WHILE INKEY$=""
+      DO:LOOP WHILE INKEY$<>""
+      NCredrawPane(0)
+      NCredrawPane(1)  
+      NCcursor(ACTIVE.NC,1)
+      NCdrawMenu
 
     CASE ELSE
       extAction = "EXTaction" + ex
@@ -484,7 +527,7 @@ END FUNCTION
 SUB NCchangeDir(side AS INTEGER, p AS STRING)
   'change dir in pane
 
-  LOCAL STRING f
+  LOCAL STRING f, size, kind
 
   PATH.NC(side) = p
   CHDIR p
@@ -499,11 +542,13 @@ SUB NCchangeDir(side AS INTEGER, p AS STRING)
   DO WHILE f <> ""
     IF LEFT$(f,1)<> "." OR HIDDEN.NC THEN
       COUNT.NC(side) = COUNT.NC(side) + 1
-      IF NCdateTime(f) = "" THEN
-        ITEM.NC(side,COUNT.NC(side)) = "D" + f + "|" + NCsize(f) 
+      size = NCsize(f)
+      IF VAL(size) = 0 THEN
+        kind = "D"
       ELSE
-        ITEM.NC(side,COUNT.NC(side)) = "F" + f + "|" + NCsize(f) +"|" + NCdateTime(f)
+        kind = "F"
       ENDIF
+      ITEM.NC(side,COUNT.NC(side)) = kind + f + "|" + NCsize(f) +"|" + NCdateTime(f)
     ENDIF
     f = DIR$()
   LOOP
@@ -519,7 +564,7 @@ SUB NCredrawPane(side AS INTEGER)
   'redraw pane
 
   LOCAL STRING short = PATH.NC(side)
-  LOCAL INTEGER i
+  LOCAL INTEGER i, fcol = RGB(WHITE)
 
   IF LEN(short)>46 THEN short = LEFT$(short,45)+"~"
 
@@ -530,22 +575,23 @@ SUB NCredrawPane(side AS INTEGER)
   TEXT 400*side+200,600-52,NCcounter(side),"CT",,,RGB(WHITE),RGB(BLUE)
   
   FOR i = POS.NC(side) TO MIN(COUNT.NC(side), MAX_ROWS.NC+POS.NC(side))
-    IF MID$(ITEM.NC(side,i),2,1) = "." THEN
-      TEXT 400*side+8, 16*(i-POS.NC(side)+1),NCout(ITEM.NC(side,i)),,,,RGB(RED),RGB(BLUE)
+    STR.NC = ITEM.NC(side,i)
+    IF LEFT$(STR.NC,1)="D" THEN
+      fcol = RGB(YELLOW) 'dir
     ELSE
-      TEXT 400*side+8, 16*(i-POS.NC(side)+1),NCout(ITEM.NC(side,i)),,,,RGB(WHITE),RGB(BLUE)
+      fcol = RGB(WHITE) 'file
+    ENDIF     
+    IF MID$(STR.NC,2,1)="." THEN
+      fcol = RGB(RED) 'hidden file/dir
     ENDIF
+    TEXT 400*side+8, 16*(i-POS.NC(side)+1),NCout(ITEM.NC(side,i)),,,,fcol,RGB(BLUE)
   NEXT i
 END SUB
 
 FUNCTION NCout(s AS STRING) AS STRING
   'prepare string
 
-  IF LEFT$(s,1) = "D" THEN
-    NCout = NCname(MID$(FIELD$(s,1,"|"),2)) + " " + RIGHT$(SPACE$(9)+FIELD$(s,2,"|"),9) + SPACE$(15)
-  ELSE
-    NCout = NCname(MID$(FIELD$(s,1,"|"),2)) + " " + RIGHT$(SPACE$(9)+FIELD$(s,2,"|"),9) + " " + FIELD$(s,3,"|")
-  ENDIF  
+  NCout = NCname(MID$(FIELD$(s,1,"|"),2)) + " " + RIGHT$(SPACE$(9)+FIELD$(s,2,"|"),9) + " " + FIELD$(s,3,"|")
 END FUNCTION
 
 FUNCTION NCname(f AS STRING) AS STRING
@@ -644,7 +690,11 @@ SUB NCdrawCL(p AS STRING)
   'outputs command line
 
   BOX 0,568,800,16,0,,RGB(BLACK)
-  TEXT 0, 568,p,,,,RGB(WHITE),RGB(BLACK)
+  TEXT 2*8, 568,p,"LT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 800,568,VERSION,"RT",8,,RGB(RED)
+  IF HIDDEN.NC THEN
+    TEXT 0,568,"H","LT",8,,RGB(RED),RGB(BLACK)
+  ENDIF
 END SUB
 
 SUB NCcursor(side AS INTEGER, show AS INTEGER)
@@ -652,16 +702,22 @@ SUB NCcursor(side AS INTEGER, show AS INTEGER)
 
   LOCAL STRING short = PATH.NC(side)
   LOCAL INTEGER hid = MID$(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side)),2,1)="." 
+  LOCAL INTEGER fcol
   CUR_PATH.NC = PATH.NC(side)
 
   IF LEN(short)>46 THEN short = LEFT$(short,45)+"~"
   
+  IF LEFT$(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side)),1) = "D" THEN
+    fcol = RGB(YELLOW) 'dir
+  ELSE
+    fcol = RGB(WHITE) 'file
+  ENDIF
   IF show THEN
     TEXT 400*side+200,0," "+short+" ","CT",,,RGB(BLUE),RGB(WHITE)
     IF hid THEN
       TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),RGB(RED)
     ELSE
-      TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),RGB(WHITE)
+      TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),fcol
     ENDIF
     SELECTED.NC = FIELD$(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side)),1,"|")
     NCdrawCL(CUR_PATH.NC + MID$(SELECTED.NC,2))        
@@ -671,7 +727,7 @@ SUB NCcursor(side AS INTEGER, show AS INTEGER)
     IF hid THEN
       TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(RED),RGB(BLUE)
     ELSE
-      TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(WHITE),RGB(BLUE)
+      TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,fcol,RGB(BLUE)
     ENDIF
   ENDIF
 END SUB
@@ -703,7 +759,7 @@ SUB NCsort(side AS INTEGER)
     mi = i - 1
     ms = ITEM.NC(side,mi)
     FOR j = i TO COUNT.NC(side)
-      IF ITEM.NC(side,j) < ms THEN
+      IF UCASE$(ITEM.NC(side,j)) < UCASE$(ms) THEN
         mi = j
         ms = ITEM.NC(side,mi)
       ENDIF
@@ -1090,7 +1146,6 @@ END FUNCTION
 SUB NCinit
   'INIT
 
-  MODE 1,8
   CHDIR CUR_PATH.NC
 
   CURSOR.NC(0) = 0
@@ -1116,7 +1171,7 @@ SUB NCinit
   NCsetMenu(8, "RESERV", 0) 'Un/TAR
   NCsetMenu(9, "QuitNC", 1)
   NCsetMenu(10,"RESERV", 0)
-  NCsetMenu(11,"L=R", 1)
+  NCsetMenu(11,"LP=RP", 1)
  
   NCdrawMenu
 END SUB
@@ -1284,7 +1339,6 @@ SUB NCviewTXT(filePath AS STRING)
   NCcursor(ACTIVE.NC,1)
   NCdrawMenu
 END SUB
-
 SUB NCview
   'parrent for viewer
 
@@ -1296,7 +1350,10 @@ SUB NCview
       'text view
       NCviewTXT(CUR_PATH.NC + MID$(SELECTED.NC,2))
       
-    CASE "BMP", "PNG", "BMP", "JPG"
+    CASE "BMP"
+      NCviewBMP(CUR_PATH.NC + MID$(SELECTED.NC,2))
+
+    CASE "PNG", "BMP", "JPG"
       'image view
       NCwarning("IMAGE VIEW", "Viewer not available yet...")
 
@@ -1318,4 +1375,97 @@ SUB NCview
 
   END SELECT
 END SUB
+
+SUB NCviewBMP(filePath AS STRING)
+  LOCAL STRING b
+  LOCAL INTEGER w, h, bpp, nw, nh
+
+  NCwaitingON("BMP VIEW")
+  OPEN filePath FOR INPUT AS #3
+  b = INPUT$(2, #3)
+  SELECT CASE b
+    CASE "BM"
+      b = INPUT$(16, #3)
+      b = INPUT$(4, #3)
+      w = ABS(STR2BIN(INT32, b))
+      b = INPUT$(4, #3)
+      h = ABS(STR2BIN(INT32, b))
+      b = INPUT$(2, #3)
+      b = INPUT$(2, #3)
+      bpp = STR2BIN(UINT16, b)
+      CLOSE #3
+      
+      PAGE WRITE 2
+      LOAD BMP filePath
+      PAGE WRITE 1
+      PAGE COPY 0 TO 1
+      nw = w:nh = h
+      IF nw > 600 THEN
+        nw = 600
+        nh = nh*600/w
+      ENDIF
+      IF nh > 500 THEN
+        nw = nw*500/nh
+        nh = 500
+      ENDIF
+      NCwaitingOFF
+      BOX (800-nw)/2-4, (600-nh)/2-4,nw+8,nh+28,0,RGB(YELLOW),RGB(YELLOW)
+      BOX (800-nw)/2-3, (600-nh)/2-3,nw+6,nh+26,2,RGB(BLACK)
+      LINE (800-nw)/2-3, (600-nh)/2+nh+2,400+nw/2+3,(600-nh)/2+nh+2,2,RGB(BLACK)    
+      IMAGE RESIZE 0,0,w,h,(800-nw)/2, (600-nh)/2,nw,nh,2
+      TEXT 400,(600-nh)/2+nh+4,filePath+", "+STR$(w)+"x"+STR$(h)+", "+STR$(bpp)+"bpp","CT",8,,RGB(BLACK), RGB(YELLOW)          
+      PAGE WRITE 0
+      PAGE COPY 1 TO 0
+  END SELECT
+  DO:LOOP WHILE INKEY$<>CHR$(27)  
+  NCredrawPane(0)
+  NCredrawPane(1)  
+  NCcursor(ACTIVE.NC,1)
+  NCdrawMenu
+END SUB
+
+SUB NCcompress(source AS STRING, dest AS STRING)
+  LOCAL INTEGER cnt(255), ind(255),i, dif = 0, ex = 1
+  LOCAL STRING c
+
+  OPEN source FOR INPUT AS #3
+    DO WHILE NOT EOF(#3)
+      c = INPUT$(1, #3)
+      INC cnt(ASC(c))
+    LOOP 
+  CLOSE #3
+  CLS
+  FOR i = 0 TO 255
+    ind(i) = i
+    IF cnt(i) > 0 THEN 
+      '?i":"cnt(i),
+      INC dif
+    ENDIF
+  NEXT i
+  DO WHILE ex < dif
+    ex = 2*ex
+  LOOP
+  ex=ex-1
+  LOCAL INTEGER HUF(ex-1)
+  dif = dif - ex
+  SORT cnt(),ind()
+  FOR i = 255  TO 0 STEP -1
+    HUF(255-i) = ind(i)
+    IF cnt(i) = 0 THEN EXIT FOR
+  NEXT i
+  FOR i=0 TO ex-1
+    ind(HUF(i))=i
+  NEXT i
+  'MATH V_PRINT HUF()
+  MMDEBUG BREAK
+  OPEN source FOR INPUT AS #3
+    DO WHILE NOT EOF(#3)
+      c = INPUT$(1, #3)
+      
+    LOOP 
+  CLOSE #3
+  
+  DO:LOOP WHILE INKEY$=""
+END SUB
+
 
