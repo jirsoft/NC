@@ -6,6 +6,7 @@ Simple parody on Norton (Volkov...) commanders for Colour Maximite 2
 	DATETIME for DIRs
 	DIRs are in yellow
 	case unsensitive sorting
+	status for HIDDEN files
 
 #### v0.3
 	added external viewer ("VIEWER.INC") and action ("ACTION.INC") for MAR files plus example
