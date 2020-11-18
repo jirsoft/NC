@@ -1,21 +1,26 @@
 #MMDEBUG ON
+
 OPTION EXPLICIT
 OPTION DEFAULT NONE
 OPTION BASE 0
-MODE 1,8
 
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
-CONST VERSION = "v0.31"
-
+CONST VERSION = "0.40"
 CONST FILECHARS.NC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()_-."
-
 CONST MAX_ITEMS.NC = 500 'max number of items in pane
 CONST MAX_ROWS.NC = 32   'max row in list display
+CONST ESC.NC = CHR$(27)
+CONST ENTER.NC = CHR$(10)
+CONST CR.NC = CHR$(13)
+CONST LF.NC = CHR$(10)
+CONST TICK.NC = CHR$(232)
+
 DIM STRING SELECTED.NC   'current selected item
-DIM STRING CUR_PATH.NC = NCgetPath(MM.INFO$(CURRENT))     'current path
-DIM STRING MANUAL.NC = CUR_PATH.NC + "MANUAL.TXT"
+DIM STRING NC_PATH.NC = NCgetPath(MM.INFO$(CURRENT))     'path to NC executable
+DIM STRING MANUAL.NC = NC_PATH.NC + "MANUAL.TXT"
+DIM STRING CUR_PATH.NC          'current path
 DIM STRING MENU.NC(11) LENGTH 7 'menu
 DIM INTEGER EN_MENU.NC(11)      'menu enabled
 DIM INTEGER CURSOR.NC(1)        'cursor position in pane
@@ -33,8 +38,21 @@ CONST CURSOR_TIME = 300   'NCinput cursor blink speed in ms
 DIM INTEGER CURSOR_X.NC, CURSOR_Y.NC, CURSOR_ON.NC, CURSOR_INT.NC = 0 'cursor position
 
 DIM INTEGER HLP.NC        'temporary integer var
-DIM INTEGER HIDDEN.NC = 0 'not show hidden files
+DIM INTEGER HIDDEN.NC = 0 'not show hidden items
+DIM INTEGER UNSORT.NC = 0 'not sort items
 DIM STRING STR.NC         'temporary string var
+
+DIM INTEGER UI_X.NC, UI_Y.NC, UI_W.NC, UI_H.NC, UI_ON.NC = 0
+
+DIM STRING SS.NC = "" 'screenshot was made
+
+DIM INTEGER CFG_ExtView.NC = 0
+DIM INTEGER CFG_ExtAct.NC = 0
+DIM INTEGER CFG_ESCup.NC = 0
+DIM INTEGER CFG_DirFil.NC = 0
+DIM INTEGER CFG_TXTfb.NC = 0
+DIM INTEGER CFG_HighColor.NC = 0
+DIM INTEGER CFG.NC
 
 NCinit
 
@@ -44,24 +62,75 @@ NCdrawCL(PATH.NC(ACTIVE.NC))
 
 NCcursor(0,1)
 
-ON KEY NCkey
-DO:LOOP
+ON KEY 157, NCprintScreen
+DIM STRING kk
+DO
+  IF SS.NC <> "" THEN 'screenshot was prepared
+    PAGE COPY 0 TO 1
+    CLS
+    BLIT WRITE #64,VAL(FIELD$(SS.NC,1,",")),VAL(FIELD$(SS.NC,2,","))
+    SAVE IMAGE PATH.NC(ACTIVE.NC)+"ScreenShot.BMP",VAL(FIELD$(SS.NC,1,",")),VAL(FIELD$(SS.NC,2,",")),VAL(FIELD$(SS.NC,3,",")),VAL(FIELD$(SS.NC,4,","))
+    BLIT CLOSE #64
+    PAGE COPY 1 TO 0
+    SS.NC = ""
+    NCchangeDir(ACTIVE.NC,PATH.NC(ACTIVE.NC))
+    NCcursor(ACTIVE.NC,1)
+  ENDIF
+
+  kk = INKEY$
+  IF kk <> "" THEN NCkey(ASC(kk))
+LOOP
 END
 
-SUB NCkey
+SUB NCprintScreen
+  IF SS.NC = "" THEN
+    IF (KEYDOWN(7) AND 1) AND UI_ON.NC THEN 'LEFT ALT, DIALOG screemshot
+      SS.NC = STR$(UI_X.NC) + "," + STR$(UI_Y.NC) + "," + STR$(UI_W.NC) + "," + STR$(UI_H.NC)
+      BLIT READ #64, UI_X.NC, UI_Y.NC, UI_W.NC, UI_H.NC
+    ELSE
+      SS.NC = "0,0," + STR$(MM.HRES) + "," + STR$(MM.VRES)
+      BLIT READ #64, 0, 0, MM.HRES, MM.VRES
+    ENDIF
+  ENDIF
+END SUB     
+
+SUB NCkey(kk AS INTEGER)
   'main SUB for key control
 
-  SELECT CASE KEYDOWN(1)
+  LOCAL STRING ccc
+  
+  SELECT CASE kk
     CASE 128  'up
       NCup
   
     CASE 129  'down
       NCdown
 
+    CASE ASC("a") TO ASC("z")
+      NCfindFirstChar(CHR$(kk))
+
+    CASE 27  'ESC
+      IF CFG_ESCup.NC THEN
+        IF LEFT$(ITEM.NC(ACTIVE.NC,0),3) = "D.." THEN
+          NCcursor(ACTIVE.NC,0)
+          PATH.NC(ACTIVE.NC) = NCchangePath(PATH.NC(ACTIVE.NC), "..")
+          NCchangeDir(ACTIVE.NC,PATH.NC(ACTIVE.NC))
+          NCdrawCL(PATH.NC(ACTIVE.NC))
+          NCcursor(ACTIVE.NC,1)
+        ENDIF
+      ENDIF
+
     CASE 9    'TAB
       NCcursor(ACTIVE.NC,0)
+      STR.NC = PATH.NC(ACTIVE.NC)
+      IF LEN(STR.NC)>46 THEN STR.NC = LEFT$(STR.NC,45)+"~"
+      TEXT 400*ACTIVE.NC+200,0," " + STR.NC + " ", "CT",8,,RGB(WHITE),RGB(BLUE)
       ACTIVE.NC = 1 - ACTIVE.NC
       NCcursor(ACTIVE.NC,1)
+      STR.NC = PATH.NC(ACTIVE.NC)
+      IF LEN(STR.NC)>46 THEN STR.NC = LEFT$(STR.NC,45)+"~"
+      TEXT 400*ACTIVE.NC+200,0," " + STR.NC + " ", "CT",8,,RGB(BLUE),RGB(WHITE)
+
 
     CASE 10   'ENTER
       SELECTED.NC = FIELD$(ITEM.NC(ACTIVE.NC,CURSOR.NC(ACTIVE.NC)+POS.NC(ACTIVE.NC)),1,"|") 
@@ -84,9 +153,9 @@ SUB NCkey
       IF EN_MENU.NC(1) THEN
         IF SELECTED.NC <> "D.." THEN
           IF LEFT$(SELECTED.NC,1)="D" THEN
-            NCwaitingON("GET SIZE")
+            ccc = NCwaitingON("GET SIZE")
             HLP.NC = NCmeasure(CUR_PATH.NC+MID$(SELECTED.NC,2))
-            NCwaitingOFF     
+            NCwaitingOFF(ccc)     
             NCwarning("GET SIZE","'"+MID$(SELECTED.NC,2)+"' has "+STR$(HLP.NC>>16,0,0)+" bytes in " + STR$(HLP.NC AND &hFFFF,0,0)+" items")
           ELSE
             HLP.NC = MM.INFO(FILESIZE CUR_PATH.NC+MID$(SELECTED.NC,2))
@@ -191,10 +260,7 @@ SUB NCkey
 
     CASE 155  'F11
       IF EN_MENU.NC(10) THEN
-        IF LEFT$(SELECTED.NC,1) = "F" THEN
-          NCcompress(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2),PATH.NC(1-ACTIVE.NC))
-          'NCchangeDir(1-ACTIVE.NC,PATH.NC(1-ACTIVE.NC))
-        ENDIF
+        NCconfig
       ENDIF
 
     CASE 156  'F12
@@ -202,7 +268,7 @@ SUB NCkey
         NCchangeDir(1-ACTIVE.NC,PATH.NC(ACTIVE.NC))        
       ENDIF
 
-    CASE ASC("H"), ASC("h")
+    CASE ASC("H")
       HIDDEN.NC = 1 - HIDDEN.NC
       NCdrawCL(PATH.NC(ACTIVE.NC))
       NCdrawMenu
@@ -210,9 +276,14 @@ SUB NCkey
       NCchangeDir(1,PATH.NC(1))
       NCcursor(ACTIVE.NC,1)
 
-    CASE ASC("S")
-      SAVE IMAGE "ScreenShot.bmp"
-      
+    CASE ASC("U")
+      UNSORT.NC = 1 - UNSORT.NC
+      NCdrawCL(PATH.NC(ACTIVE.NC))
+      NCdrawMenu
+      NCchangeDir(0,PATH.NC(0))
+      NCchangeDir(1,PATH.NC(1))
+      NCcursor(ACTIVE.NC,1)
+
     CASE 134  'HOME
       NChome
       
@@ -220,6 +291,109 @@ SUB NCkey
       NCend
 
   END SELECT
+  'ON KEY NCkey
+END SUB
+
+SUB NCconfig
+  LOCAL STRING txt = "External viewers enabled"
+        txt = txt + ",External actions enabled"
+        txt = txt + ",ESC to parrent dir"
+        txt = txt + ",DIRs before FILEs"
+        txt = txt + ",TEXT VIEWER fallback (BIN else)"
+        txt = txt + ",HIGH COLOR mode"
+      
+  LOCAL INTEGER sel = NCconfigPack()
+  LOCAL INTEGER oldSel = sel
+  sel = NCselect("CONFIGURATION",txt,sel)
+  NCconfigUnpack(sel)
+  
+  oldSel = sel XOR oldSel 'difference between OLD and NEW settings  
+  IF oldSel AND 32 THEN
+    IF CFG_HighColor.NC THEN
+      MODE 1,16
+    ELSE
+      MODE 1,8
+    ENDIF
+    FONT 8
+  ENDIF 
+  IF (oldSel AND 8) OR (oldSel AND 32) THEN 'changed MODE or items sorting
+    NCchangeDir(0,PATH.NC(0))
+    NCchangeDir(1,PATH.NC(1))
+    NCdrawMenu
+    NCdrawCL(PATH.NC(ACTIVE.NC))
+    NCcursor(ACTIVE.NC,1)
+  ENDIF
+  IF oldSel <> 0 THEN 
+    NCconfigSave(sel)
+  ENDIF
+END SUB
+
+FUNCTION NCconfigPack() AS INTEGER
+  NCconfigPack = CFG_ExtView.NC + 2*CFG_ExtAct.NC + 4*CFG_ESCup.NC
+  NCconfigPack = NCconfigPack + 8*CFG_DirFil.NC + 16*CFG_TXTfb.NC + 32*CFG_HighColor.NC
+END FUNCTION
+
+SUB NCconfigSave(sel AS INTEGER)
+  OPEN NC_PATH.NC + "NC.CFG" FOR OUTPUT AS #3
+  ?#3,BIN$(sel)
+  CLOSE #3
+END SUB
+
+SUB NCconfigLoad
+  LOCAL STRING sCfg
+  LOCAL INTEGER iCfg
+  ON ERROR SKIP
+  OPEN NC_PATH.NC + "NC.CFG" FOR INPUT AS #3
+  IF MM.ERRNO = 0 THEN
+    LINE INPUT #3, sCfg
+    iCfg = VAL("&b"+sCfg)
+    CLS
+    NCconfigUnpack(iCfg)
+    CLOSE #3
+  ENDIF
+END SUB
+
+SUB NCconfigUnpack(sel AS INTEGER)
+  CFG_ExtView.NC = (sel AND 1) > 0 
+  CFG_ExtAct.NC = (sel AND 2) > 0
+  CFG_ESCup.NC = (sel AND 4) > 0
+  CFG_DirFil.NC = (sel AND 8) > 0
+  CFG_TXTfb.NC = (sel AND 16) > 0
+  CFG_HighColor.NC = (sel AND 32) > 0
+END SUB
+
+SUB NCfindFirstChar(ch AS STRING)
+  LOCAL INTEGER i
+  FOR i = 0 TO COUNT.NC(ACTIVE.NC)
+    IF LCASE$(MID$(ITEM.NC(ACTIVE.NC,i),2,1)) = ch THEN
+      'STR.NC = MID$(ITEM.NC(ACTIVE.NC,i),2) 
+      NCsetCurPos(ACTIVE.NC, i)
+      EXIT FOR
+    ENDIF
+  NEXT i
+END SUB
+
+SUB NCsetCurPos(side AS INTEGER, ind AS INTEGER)
+  'find optimal POS and CURSOR position for ind
+
+  LOCAL INTEGER actCur, actPos
+  LOCAL INTEGER maxPos = MAX(0, COUNT.NC(side) - MAX_ROWS.NC)
+  IF ind <= COUNT.NC(side) THEN
+    actcur = MAX_ROWS.NC\2
+    actPos = ind - actCur
+    DO WHILE actPos < 0
+      INC actCur, -1
+      INC actPos
+    LOOP
+    DO WHILE actPos > maxPos
+      INC actCur
+      INC actPos, -1
+    LOOP
+    CURSOR.NC(side) = actCur
+    POS.NC(side) = actPos
+    NCredrawPane(side)
+    NCcursor(side,1)
+  ENDIF
 END SUB
 
 FUNCTION NCnewName(p AS STRING, n AS STRING) AS STRING
@@ -290,44 +464,54 @@ SUB NChelp
   'show help
 
   LOCAL STRING txt = "About NC,Shortcuts,Manual"
-  LOCAL INTEGER h = NCselect("CHOOSE SECTION", txt)
+  
+  LOCAL INTEGER h = NCchoice("CHOOSE SECTION", txt)
   SELECT CASE h
     CASE <0 'ESC
       'NCwarning("HELP","You was no able to choose :-(")
 
     CASE 0
-      LOCAL STRING about(3) LENGTH 100
-      about(0) = "My name is 'Napoleon Commander' (v" + VERSION+")"
+      LOCAL STRING about(7) LENGTH 100
+      about(0) = "              I'm Napoleon Commander " + NCdigital(VERSION)
       about(1) = ""
-      about(2) = " I was developed by JirSoft, Nov/2020"
-      about(1) = ""
-      NCinfo("ABOUT ME",about())
+      about(2) = "              Born on: 7. November 2020"
+      about(3) = "              Where  : Czech Republic"
+      about(4) = "              Father : " + CHR$(157) + "JirSoft"
+      about(5) = "              Mother : Unknown"
+      about(6) = ""
+      about(7) = "              I'm living inside of Colour Maximite 2 "
+      NCinfo("ABOUT ME",about(),1)
       
     CASE 1
-      LOCAL STRING shrt(20) LENGTH 100
-      shrt( 0) = "Napoleon Commander v" + VERSION
+      LOCAL STRING shrt(25) LENGTH 100
+      shrt( 0) = "          Napoleon Commander " + VERSION
       shrt( 1) = ""
-      shrt( 2) = "Up/Down  Move row on active pane"
+      shrt( 2) = CHR$(225) + " " + CHR$(226) + "      Up/Down  Move row on active pane"
       shrt( 3) = "Home/End Jump to first/last row"
       shrt( 4) = "TAB      Switch active pane"
-      shrt( 5) = "ENTER    Change active directory or invoke action"
-      shrt( 6) = "H        Show or hide hidden files"
-      shrt( 7) = ""
-      shrt( 8) = "F1       Show this help"
-      shrt( 9) = "F2       Calculate item size"
-      shrt(10) = "F3       Quick (& dirty) file viewer"
-      shrt(11) = "F4       Quick editor (not done yet)"
-      shrt(12) = "F5       Copy file or directory"
-      shrt(13) = "F6       Move or rename (if both panes are same)"
-      shrt(14) = "F7       Create new directory"
-      shrt(15) = "F8       Delete file or directory"
-      shrt(16) = "F9       RESERVED (for TAR?)"
-      shrt(17) = "F10      Quit"
-      shrt(18) = "F11      RESERVED"
-      shrt(19) = "F12      Duplicate view to inactive pane"
-      shrt(20) = ""
+      shrt( 5) = "Keys a-z Jump to first item with this char on begin"
+      shrt( 6) = ""
+      shrt( 7) = "ENTER    Change active directory or invoke action"
+      shrt( 8) = "ESC      Jump to parrent directory (if possible)"
+      shrt( 9) = "Shift+H  Show or hide hidden items"
+      shrt(10) = "Shift+U  Unsorted SD card layout"
+      shrt(11) = "PrintScr Save screen to 'ScreenShot.BMP', with LALT just dialog"
+      shrt(12) = ""
+      shrt(13) = "F1       Show this help"
+      shrt(14) = "F2       Calculate item size"
+      shrt(15) = "F3       Quick (& dirty) file viewer"
+      shrt(16) = "F4       Quick editor (not done yet)"
+      shrt(17) = "F5       Copy file or directory"
+      shrt(18) = "F6       Move or rename (if both panes are same)"
+      shrt(19) = "F7       Create new directory"
+      shrt(20) = "F8       Delete file or directory"
+      shrt(21) = "F9       RESERVED (for TAR?)"
+      shrt(22) = "F10      Quit"
+      shrt(23) = "F11      RESERVED"
+      shrt(24) = "F12      Duplicate view to inactive pane"
+      shrt(25) = ""
   
-      NCinfo("SHORTCUTs",shrt())
+      NCinfo("KEYBOARD SHORTCUTs",shrt())
       
     CASE 2
       NCviewTXT(MANUAL.NC)
@@ -455,7 +639,6 @@ SUB NCaction(p AS STRING, s AS STRING)
   'ENTER pressed on file (skeleton)
 
   LOCAL STRING extAction, ex = UCASE$(NCgetExtension(s))
-  EXT_ERR.NC = -1
 
   SELECT CASE ex
     CASE "BMP"
@@ -499,12 +682,15 @@ SUB NCaction(p AS STRING, s AS STRING)
       NCdrawMenu
 
     CASE ELSE
-      extAction = "EXTaction" + ex
-      ON ERROR SKIP
-      CALL extAction, p+s
-      IF EXT_ERR.NC < 0 THEN
-        IF MM.ERRNO>0 THEN 
-          NCwarning("ACTION " + ex,"External action not available")
+      EXT_ERR.NC = -1
+      IF CFG_ExtAct.NC THEN
+        extAction = "EXTaction" + ex
+        ON ERROR SKIP
+        CALL extAction, p+s
+        IF EXT_ERR.NC < 0 THEN
+          IF MM.ERRNO>0 THEN 
+            NCwarning("ACTION " + ex,"External action not available")
+          ENDIF
         ENDIF
       ENDIF
 
@@ -528,12 +714,12 @@ SUB NCchangeDir(side AS INTEGER, p AS STRING)
   'change dir in pane
 
   LOCAL STRING f, size, kind
-
+  
   PATH.NC(side) = p
   CHDIR p
 
   IF UCASE$(PATH.NC(side))<>"A:/" THEN
-    ITEM.NC(side,0) = "D..|>UP--DIR<"
+    ITEM.NC(side,0) = "D..|[PARRENT]"
     COUNT.NC(side) = 0
   ELSE
     COUNT.NC(side)=-1
@@ -556,7 +742,6 @@ SUB NCchangeDir(side AS INTEGER, p AS STRING)
   CURSOR.NC(side) = 0
   NCsort(side)
   NCredrawPane(side)
-
   CHDIR CUR_PATH.NC
 END SUB
 
@@ -568,10 +753,15 @@ SUB NCredrawPane(side AS INTEGER)
 
   IF LEN(short)>46 THEN short = LEFT$(short,45)+"~"
 
+  PAGE WRITE 1
   BOX 400*side,0,400,568,0,,RGB(BLACK)
   BOX 400*side,0,400,566,0,,RGB(BLUE)
   BOX 400*side+1,0+6,400-3,568-15,2,RGB(WHITE),RGB(BLUE)
-  TEXT 400*side+200,0," "+short+" ","CT",,,RGB(WHITE),RGB(BLUE)
+  IF side = ACTIVE.NC THEN
+    TEXT 400*side+200,0," "+short+" ","CT",8,,RGB(BLUE),RGB(WHITE)
+  ELSE
+    TEXT 400*side+200,0," "+short+" ","CT",8,,RGB(WHITE),RGB(BLUE)
+  ENDIF
   TEXT 400*side+200,600-52,NCcounter(side),"CT",,,RGB(WHITE),RGB(BLUE)
   
   FOR i = POS.NC(side) TO MIN(COUNT.NC(side), MAX_ROWS.NC+POS.NC(side))
@@ -586,12 +776,14 @@ SUB NCredrawPane(side AS INTEGER)
     ENDIF
     TEXT 400*side+8, 16*(i-POS.NC(side)+1),NCout(ITEM.NC(side,i)),,,,fcol,RGB(BLUE)
   NEXT i
+  PAGE WRITE 0
+  BLIT 400*side,0,400*side,0,400,568,1
 END SUB
 
 FUNCTION NCout(s AS STRING) AS STRING
   'prepare string
 
-  NCout = NCname(MID$(FIELD$(s,1,"|"),2)) + " " + RIGHT$(SPACE$(9)+FIELD$(s,2,"|"),9) + " " + FIELD$(s,3,"|")
+  NCout = NCname(MID$(FIELD$(s,1,"|"),2)) + " " + RIGHT$(SPACE$(9)+FIELD$(s,2,"|"),9) + " " + RIGHT$(SPACE$(14)+FIELD$(s,3,"|"),14)
 END FUNCTION
 
 FUNCTION NCname(f AS STRING) AS STRING
@@ -622,7 +814,7 @@ FUNCTION NCsize(f AS STRING) AS STRING
 
   LOCAL INTEGER s = MM.INFO(FILESIZE f)
   IF s<0 THEN
-    NCsize = ">SUB-DIR<"
+    NCsize = "DIRECTORY"
   ELSE
     NCsize = STR$(s,9,0)
   ENDIF
@@ -686,14 +878,31 @@ FUNCTION NCgetName(p AS STRING) AS STRING
   ENDIF
 END FUNCTION
 
+FUNCTION NCdigital(s AS STRING) AS STRING
+  LOCAL INTEGER i
+  LOCAL STRING c
+
+  FOR i = 1 TO LEN(s)
+    c = MID$(s, i, 1)
+    IF INSTR("0123456789", c) > 0 THEN
+      NCdigital = NCdigital + CHR$(ASC(c) - 48 + 240)
+    ELSE
+      NCdigital = NCdigital + c
+    ENDIF
+  NEXT i
+END FUNCTION
+
 SUB NCdrawCL(p AS STRING)
   'outputs command line
 
   BOX 0,568,800,16,0,,RGB(BLACK)
-  TEXT 2*8, 568,p,"LT",8,,RGB(WHITE),RGB(BLACK)
-  TEXT 800,568,VERSION,"RT",8,,RGB(RED)
+  TEXT 3*8, 568,p,"LT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 800,568,NCdigital(VERSION),"RT",8,,RGB(RED)
   IF HIDDEN.NC THEN
     TEXT 0,568,"H","LT",8,,RGB(RED),RGB(BLACK)
+  ENDIF
+  IF UNSORT.NC THEN
+    TEXT 8,568,"U","LT",8,,RGB(RED),RGB(BLACK)
   ENDIF
 END SUB
 
@@ -713,7 +922,7 @@ SUB NCcursor(side AS INTEGER, show AS INTEGER)
     fcol = RGB(WHITE) 'file
   ENDIF
   IF show THEN
-    TEXT 400*side+200,0," "+short+" ","CT",,,RGB(BLUE),RGB(WHITE)
+    'TEXT 400*side+200,0," "+short+" ","CT",,,RGB(BLUE),RGB(WHITE)
     IF hid THEN
       TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),RGB(RED)
     ELSE
@@ -723,7 +932,7 @@ SUB NCcursor(side AS INTEGER, show AS INTEGER)
     NCdrawCL(CUR_PATH.NC + MID$(SELECTED.NC,2))        
     TEXT 400*side+200,600-52,NCcounter(side),"CT",,,RGB(WHITE),RGB(BLUE)
   ELSE
-    TEXT 400*side+200,0," "+short+" ","CT",,,RGB(WHITE),RGB(BLUE)
+    'TEXT 400*side+200,0," "+short+" ","CT",,,RGB(WHITE),RGB(BLUE)
     IF hid THEN
       TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(RED),RGB(BLUE)
     ELSE
@@ -752,6 +961,7 @@ END SUB
 SUB NCsort(side AS INTEGER)
   'sort dir (need speed up, SORT()???)
 
+  IF UNSORT.NC THEN EXIT SUB
   LOCAL INTEGER mi, i, j
   LOCAL STRING ms
   
@@ -759,9 +969,16 @@ SUB NCsort(side AS INTEGER)
     mi = i - 1
     ms = ITEM.NC(side,mi)
     FOR j = i TO COUNT.NC(side)
-      IF UCASE$(ITEM.NC(side,j)) < UCASE$(ms) THEN
-        mi = j
-        ms = ITEM.NC(side,mi)
+      IF CFG_DirFil.NC THEN
+        IF UCASE$(ITEM.NC(side,j)) < UCASE$(ms) THEN
+          mi = j
+          ms = ITEM.NC(side,mi)
+        ENDIF
+      ELSE
+        IF UCASE$(MID$(ITEM.NC(side,j),2)) < UCASE$(MID$(ms,2)) THEN
+          mi = j
+          ms = ITEM.NC(side,mi)
+        ENDIF
       ENDIF
     NEXT j
     ITEM.NC(side,mi) = ITEM.NC(side,i-1)
@@ -769,119 +986,8 @@ SUB NCsort(side AS INTEGER)
   NEXT i
 END SUB
 
-FUNCTION NCquestion(title AS STRING, txt AS STRING) AS INTEGER
-  'UI QUESTION, returns 1 when OK (ENTER) was pressed, 0 else
-  'TITLE, PROMPT
-
-  LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),LEN(txt),8) 'minimum 8 chars
-  LOCAL INTEGER h = 80
-  LOCAL STRING k = ""
-  LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
-
-  PAGE WRITE 1
-  BOX 0,0,w,h,0,b,b
-  BOX 3,8,w-6,h-11,2,f,b
-  TEXT w\2,1," " + title + " ","CT",8,,f,b
-  TEXT w\2,24,txt,"CT",8,,f,b
-  TEXT 8,h-24,"Cancel","LT",8,,b,f
-  TEXT w-8,h-24,"  OK  ","RT",8,,b,f
-  PAGE WRITE 0
-  SPRITE READ #1,0,0,w,h,1
-  SPRITE SHOW #1,(MM.HRES-w)\2,(MM.VRES-h)\2,1
-  DO
-    k = INKEY$
-  LOOP WHILE k<>CHR$(27) AND k<>CHR$(10) 
-  DO:LOOP WHILE INKEY$<>""
-  SPRITE HIDE #1
-  SPRITE CLOSE #1
-  NCquestion = (k=CHR$(10))
-END FUNCTION
-
-FUNCTION NCinput(title AS STRING, txt AS STRING, def AS STRING, en AS STRING) AS STRING
-  'UI INPUT, returns text
-  'TITLE, PROMPT, DEFAULT TEXT, STRING WITH POSSIBLE CHARS
- 
-  LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),LEN(txt),LEN(def),8) 'minimum 8 chars
-  LOCAL INTEGER h = 88, change = 0
-  LOCAL STRING k = ""
-  LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
-
-  NCinput = def
-  PAGE WRITE 1
-  BOX 0,0,w,h,0,b,b
-  BOX 3,8,w-6,h-11,2,f,b
-  BOX 8,40,w-16,16,0,RGB(CYAN),RGB(CYAN)
-  TEXT w\2,1," " + title + " ","CT",8,,f,b
-  TEXT 8,22,txt,"LT",8,,f,b
-  TEXT 8,40,def,"LT",8,,f,RGB(CYAN)
-  TEXT 8,h-24,"Cancel","LT",8,,b,f
-  TEXT w-8,h-24,"  OK  ","RT",8,,b,f
-  PAGE WRITE 0
-  SPRITE READ #1,0,0,w,h,1
-  SPRITE SHOW #1,(MM.HRES-w)\2,(MM.VRES-h)\2,1
-
-  CURSOR_X.NC = (MM.HRES-w)\2+LEN(def)*8:CURSOR_Y.NC = (MM.VRES-h)\2+56
-  IF LEN(def) < ((w-16)\8) THEN CURSOR_X.NC=CURSOR_X.NC+8
-
-  CURSOR_ON.NC = 0: CURSOR_INT.NC = TIMER  
-  DO
-    IF TIMER-CURSOR_INT.NC > CURSOR_TIME THEN
-      CURSOR_ON.NC = 1 - CURSOR_ON.NC
-      IF CURSOR_ON.NC THEN
-        LINE CURSOR_X.NC, CURSOR_Y.NC, CURSOR_X.NC+7, CURSOR_Y.NC, 2, f
-      ELSE
-        LINE CURSOR_X.NC, CURSOR_Y.NC, CURSOR_X.NC+7, CURSOR_Y.NC, 2, b
-      ENDIF
-      CURSOR_INT.NC = TIMER
-    ENDIF
-    k = INKEY$
-    
-    SELECT CASE k
-      CASE CHR$(127)  'DEL, delete all
-        NCinput = ""
-        change = 1
-        LINE CURSOR_X.NC, CURSOR_Y.NC, CURSOR_X.NC+7, CURSOR_Y.NC, 2, b
-        CURSOR_X.NC = (MM.HRES-w)\2+8
-         
-      CASE CHR$(8)    'BACKSPACE, delete last character
-        IF NCinput<>"" THEN
-          IF LEN(NCinput) < ((w-16)\8) THEN
-            LINE CURSOR_X.NC, CURSOR_Y.NC, CURSOR_X.NC+7, CURSOR_Y.NC, 2, b
-            CURSOR_X.NC = CURSOR_X.NC - 8
-          ENDIF
-          NCinput = LEFT$(NCinput, LEN(NCinput) - 1)
-          change = 1
-        ENDIF
-
-      CASE ELSE
-        IF INSTR(en,k)>0 THEN
-          IF LEN(NCinput) < ((w-16)\8) THEN
-            NCinput = NCinput + k
-            change = 1
-            LINE CURSOR_X.NC, CURSOR_Y.NC, CURSOR_X.NC+7, CURSOR_Y.NC, 2, b
-            IF LEN(NCinput) < ((w-16)\8) THEN
-              CURSOR_X.NC = CURSOR_X.NC + 8
-            ENDIF
-          ELSE
-            NCinput = LEFT$(NCinput, LEN(NCinput)-1) + k
-            change = 1
-          ENDIF
-        ENDIF
-    END SELECT
-
-    IF change THEN
-      BOX (MM.HRES-w)\2+8,(MM.VRES-h)\2+40,w-16,16,0,RGB(CYAN),RGB(CYAN)
-      TEXT (MM.HRES-w)\2+8,(MM.VRES-h)\2+40,NCinput,"LT",8,,f,RGB(CYAN)
-      change = 0
-    ENDIF
-  LOOP WHILE k<>CHR$(27) AND k<>CHR$(10) 
-  SPRITE HIDE #1
-  SPRITE CLOSE #1
-  IF k=CHR$(27) THEN NCinput = ""
-END FUNCTION
-
-SUB NCinfo(title AS STRING, txt() AS STRING)
-  'UI INFO, shows more lines
+SUB NCinfo(title AS STRING, txt() AS STRING, nap AS INTEGER)
+  'UI INFO, shows more lines (BLIT #1)
   'TITLE, TEXT array
 
   LOCAL INTEGER w = 16, h = 16, i
@@ -892,89 +998,103 @@ SUB NCinfo(title AS STRING, txt() AS STRING)
     IF LEN(txt(i)) > 98 THEN txt(i) = LEFT$(txt(i),98)
     w = MAX(16+8*LEN(txt(i)), w)
   NEXT i
-  h = m*16+64
-  PAGE WRITE 1
-  BOX 0,0,w,h,0,b,b
-  BOX 3,8,w-6,h-11,2,f,b
-  TEXT w\2,1," " + title + " ","CT",8,,f,b
+  h = m*16+70
+  LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
+
+  BLIT READ #1,dx,dy,w,h 
+  BOX dx,dy,w,h,0,b,b
+  BOX dx+3,dy+8,w-6,h-11,2,f,b
+  TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
   FOR i = 0 TO m
-    TEXT 8,24+i*16,txt(i),"LT",8,,f,b
+    TEXT dx+8,dy+24+i*16,txt(i),"LT",8,,f,b
   NEXT i
-  TEXT w\2,h-24,"  OK  ","CT",8,,b,f
-  PAGE WRITE 0
-  SPRITE READ #1,0,0,w,h,1
-  SPRITE SHOW #1,(MM.HRES-w)\2,(MM.VRES-h)\2,1
+  TEXT dx+w\2,dy+h-24,"  OK  ","CT",8,,b,f
+  UI_ON.NC = 1:UI_X.NC = dx:UI_Y.NC = dy:UI_W.NC = w:UI_H.NC = h 'for screenshot
+  
+  IF nap THEN NCnapoleon(dx+8,dy+20)
+
   DO:LOOP WHILE INKEY$="" 
   DO:LOOP WHILE INKEY$<>"" 
-  SPRITE HIDE #1
-  SPRITE CLOSE #1
+  UI_ON.NC = 0
+  BLIT WRITE #1,dx,dy
+  BLIT CLOSE #1
 END SUB
 
-SUB NCwaitingON(title AS STRING)
-  'UI WAIT, start progress
+FUNCTION NCwaitingON(title AS STRING) AS STRING
+  'UI WAIT, start progress, returns coordinates as string X,Y (BLIT #2)
   'TITLE
 
   CONST txt = "Please wait..."
   LOCAL INTEGER w = 32 + MAX(8*LEN(title), 8*LEN(txt)) 'minimum width
   LOCAL INTEGER h = 48
   LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
+  LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
   
-  PAGE WRITE 1
-  BOX 0,0,w,h,0,b,b
-  BOX 3,8,w-6,h-11,2,f,b
-  TEXT w\2,1," " + title + " ","CT",8,,f,b
-  TEXT w\2,24,txt,"CT",8,,f,b
-  PAGE WRITE 0
-  SPRITE READ #1,0,0,w,h,1
-  SPRITE SHOW #1,(MM.HRES-w)\2,(MM.VRES-h)\2,1
+  BLIT READ #2,dx,dy,w,h 
+  BOX dx,dy,w,h,0,b,b
+  BOX dx+3,dy+8,w-6,h-11,2,f,b
+  TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
+  TEXT dx+w\2,dy+24,txt,"CT",8,,f,b
+  UI_ON.NC = 1:UI_X.NC = dx:UI_Y.NC = dy:UI_W.NC = w:UI_H.NC = h 'for screenshot
+
+  NCwaitingON = STR$(dx) + "," + STR$(dy)  
+END FUNCTION
+
+SUB NCwaitingOFF(coord AS STRING)
+  'UI WAIT, finish progress (BLIT #2)
+
+  LOCAL INTEGER dx = VAL(FIELD$(coord,1,","))
+  LOCAL INTEGER dy = VAL(FIELD$(coord,2,","))
+
+  UI_ON.NC = 0
+  BLIT WRITE #2,dx,dy
+  BLIT CLOSE #2
 END SUB
 
-SUB NCwaitingOFF
-  'UI WAIT, finish progress
-
-  SPRITE HIDE #1
-  SPRITE CLOSE #1
-END SUB
-
-FUNCTION NCselect(title AS STRING, txt AS STRING) AS INTEGER
-  'UI SELECT, can select up to 10 choices with keys 0-9
+FUNCTION NCchoice(title AS STRING, txt AS STRING) AS INTEGER
+  'UI CHOICE, can select one from up to 10 choices with keys 0-9 (BLIT #3)
   'TITLE, TEXT (lines separated by ",")
   
   LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),13) 'minimum 13 chars
   LOCAL INTEGER i,cnt = 0, h = 80
   LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
-  LOCAL STRING k
+  LOCAL STRING k, keysEnabled = "0123456789"
   
   DO WHILE FIELD$(txt, cnt+1, ",") <> ""
     cnt = cnt + 1
   LOOP
   cnt = MIN(cnt, 10)
+
+  keysEnabled = LEFT$(keysEnabled, cnt) + ESC.NC
+
   h = 16*cnt + 64
   FOR i = 1 TO cnt
     w = MAX(w, 8*(LEN(FIELD$(txt, i, ","))+6))
   NEXT i
-  PAGE WRITE 1
-  BOX 0,0,w,h,0,b,b
-  BOX 3,8,w-6,h-11,2,f,b
-  TEXT w\2,1," " + title + " ","CT",8,,f,b
+  LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
+  
+  BLIT READ #3,dx,dy,w,h 
+  BOX dx,dy,w,h,0,b,b
+  BOX dx+3,dy+8,w-6,h-11,2,f,b
+  TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
   FOR i = 1 TO cnt
-    TEXT 8,8+i*16," " + STR$(i-1) + " " + FIELD$(txt, i, ","),"LT",8,,f,b
+    TEXT dx+8,dy+8+i*16," " + STR$(i-1) + " " + FIELD$(txt, i, ","),"LT",8,,f,b
   NEXT i
-  TEXT w\2,h-24," Press 0-" + STR$(cnt-1) + " ","CT",8,,b,f
-  PAGE WRITE 0
-  SPRITE READ #1,0,0,w,h,1
-  SPRITE SHOW #1,(MM.HRES-w)\2,(MM.VRES-h)\2,1
+  TEXT dx+w\2,dy+h-24," Press 0-" + STR$(cnt-1) + " ","CT",8,,b,f
+  UI_ON.NC = 1:UI_X.NC = dx:UI_Y.NC = dy:UI_W.NC = w:UI_H.NC = h 'for screenshot
+
   DO
     k = INKEY$
-  LOOP WHILE INSTR("0123456789"+CHR$(27),k)=0 
+  LOOP WHILE INSTR(keysEnabled,k)=0 
   DO:LOOP WHILE INKEY$<>"" 
-  NCselect = ASC(k)-48
-  SPRITE HIDE #1
-  SPRITE CLOSE #1
+  NCchoice = ASC(k)-48
+  UI_ON.NC = 0
+  BLIT WRITE #3,dx,dy
+  BLIT CLOSE #3
 END FUNCTION
 
 SUB NCwarning(title AS STRING, txt AS STRING)
-  'UI WARNING, wait for any key
+  'UI WARNING, wait for any key (BLIT #4)
   'TITLE, INFO
 
   LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),LEN(txt),8) 'minimum 8 chars
@@ -986,19 +1106,203 @@ SUB NCwarning(title AS STRING, txt AS STRING)
     title = LEFT$(title, MIN(LEN(title),98))
     txt = LEFT$(txt, MIN(LEN(txt),98))
   ENDIF
-  PAGE WRITE 1
-  BOX 0,0,w,h,0,b,b
-  BOX 3,8,w-6,h-11,2,f,b
-  TEXT w\2,1," " + title + " ","CT",8,,f,b
-  TEXT w\2,24,txt,"CT",8,,f,b
-  TEXT w\2,h-24,"  OK  ","CT",8,,b,f
-  PAGE WRITE 0
-  SPRITE READ #1,0,0,w,h,1
-  SPRITE SHOW #1,(MM.HRES-w)\2,(MM.VRES-h)\2,1
+  LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
+  
+  BLIT READ #4,dx,dy,w,h 
+  BOX dx+0,dy+0,w,h,0,b,b
+  BOX dx+3,dy+8,w-6,h-11,2,f,b
+  TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
+  TEXT dx+w\2,dy+24,txt,"CT",8,,f,b
+  TEXT dx+w\2,dy+h-24,"  OK  ","CT",8,,b,f
+  UI_ON.NC = 1:UI_X.NC = dx:UI_Y.NC = dy:UI_W.NC = w:UI_H.NC = h 'for screenshot
+
   DO:LOOP WHILE INKEY$="" 
   DO:LOOP WHILE INKEY$<>"" 
-  SPRITE HIDE #1
-  SPRITE CLOSE #1
+  UI_ON.NC = 0
+  BLIT WRITE #4,dx,dy
+  BLIT CLOSE #4
+END SUB
+
+FUNCTION NCquestion(title AS STRING, txt AS STRING) AS INTEGER
+  'UI QUESTION, returns 1 when OK (ENTER) was pressed, 0 else (BLIT #5)
+  'TITLE, PROMPT
+
+  LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),LEN(txt),8) 'minimum 8 chars
+  LOCAL INTEGER h = 80
+  LOCAL STRING k = ""
+  LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
+  LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
+
+  BLIT READ #5,dx,dy,w,h 
+  BOX dx,dy,w,h,0,b,b
+  BOX dx+3,dy+8,w-6,h-11,2,f,b
+  TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
+  TEXT dx+w\2,dy+24,txt,"CT",8,,f,b
+  TEXT dx+8,dy+h-24,"Cancel","LT",8,,b,f
+  TEXT dx+w-8,dy+h-24,"  OK  ","RT",8,,b,f
+  UI_ON.NC = 1:UI_X.NC = dx:UI_Y.NC = dy:UI_W.NC = w:UI_H.NC = h 'for screenshot
+
+  DO
+    k = INKEY$
+  LOOP WHILE k<>ESC.NC AND k<>ENTER.NC 
+  DO:LOOP WHILE INKEY$<>""
+  UI_ON.NC = 0
+  BLIT WRITE #5,dx,dy
+  BLIT CLOSE #5
+  NCquestion = (k=ENTER.NC)
+END FUNCTION
+
+FUNCTION NCinput(title AS STRING, txt AS STRING, def AS STRING, en AS STRING) AS STRING
+  'UI INPUT, returns text (BLIT #6)
+  'TITLE, PROMPT, DEFAULT TEXT, STRING WITH POSSIBLE CHARS
+ 
+  LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),LEN(txt),LEN(def),8) 'minimum 8 chars
+  LOCAL INTEGER h = 88, change = 0
+  LOCAL STRING k = ""
+  LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
+  LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
+
+  BLIT READ #6,dx,dy,w,h 
+
+  NCinput = def
+  BOX dx,dy,w,h,0,b,b
+  BOX dx+3,dy+8,w-6,h-11,2,f,b
+  BOX dx+8,dy+40,w-16,16,0,RGB(CYAN),RGB(CYAN)
+  TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
+  TEXT dx+8,dy+22,txt,"LT",8,,f,b
+  TEXT dx+8,dy+40,def,"LT",8,,f,RGB(CYAN)
+  TEXT dx+8,dy+h-24,"Cancel","LT",8,,b,f
+  TEXT dx+w-8,dy+h-24,"  OK  ","RT",8,,b,f
+  UI_ON.NC = 1:UI_X.NC = dx:UI_Y.NC = dy:UI_W.NC = w:UI_H.NC = h 'for screenshot
+
+
+  CURSOR_X.NC = dx+LEN(def)*8:CURSOR_Y.NC = dy+56
+  IF LEN(def) < ((w-16)\8) THEN CURSOR_X.NC=CURSOR_X.NC+8
+
+  CURSOR_ON.NC = 0: CURSOR_INT.NC = TIMER  
+  DO
+    IF TIMER-CURSOR_INT.NC > CURSOR_TIME THEN
+      CURSOR_ON.NC = 1 - CURSOR_ON.NC
+      IF CURSOR_ON.NC THEN
+        TEXT CURSOR_X.NC, CURSOR_Y.NC, CHR$(223), "LT",8 ,, f, b
+      ELSE
+        TEXT CURSOR_X.NC, CURSOR_Y.NC, " ", "LT",8 ,, f, b
+      ENDIF
+      CURSOR_INT.NC = TIMER
+    ENDIF
+    k = INKEY$
+    
+    SELECT CASE k
+      CASE CHR$(127)  'DEL, delete all
+        NCinput = ""
+        change = 1
+        TEXT CURSOR_X.NC, CURSOR_Y.NC, " ", "LT",8 ,, f, b
+        CURSOR_X.NC = dx+8
+         
+      CASE CHR$(8)    'BACKSPACE, delete last character
+        IF NCinput<>"" THEN
+          IF LEN(NCinput) < ((w-16)\8) THEN
+            TEXT CURSOR_X.NC, CURSOR_Y.NC, " ", "LT",8 ,, f, b
+            CURSOR_X.NC = CURSOR_X.NC - 8
+          ENDIF
+          NCinput = LEFT$(NCinput, LEN(NCinput) - 1)
+          change = 1
+        ENDIF
+
+      CASE ELSE
+        IF INSTR(en,k)>0 THEN
+          IF LEN(NCinput) < ((w-16)\8) THEN
+            NCinput = NCinput + k
+            change = 1
+            TEXT CURSOR_X.NC, CURSOR_Y.NC, " ", "LT",8 ,, f, b
+            IF LEN(NCinput) < ((w-16)\8) THEN
+              CURSOR_X.NC = CURSOR_X.NC + 8
+            ENDIF
+          ELSE
+            NCinput = LEFT$(NCinput, LEN(NCinput)-1) + k
+            change = 1
+          ENDIF
+        ENDIF
+    END SELECT
+
+    IF change THEN
+      BOX dx+8,dy+40,w-16,16,0,RGB(CYAN),RGB(CYAN)
+      TEXT dx+8,dy+40,NCinput,"LT",8,,f,RGB(CYAN)
+      change = 0
+    ENDIF
+  LOOP WHILE k<>ESC.NC AND k<>ENTER.NC 
+  UI_ON.NC = 0
+  BLIT WRITE #6,dx,dy
+  BLIT CLOSE #6
+  IF k=ESC.NC THEN NCinput = ""
+END FUNCTION
+
+FUNCTION NCselect(title AS STRING, txt AS STRING, s AS INTEGER) AS INTEGER
+  'UI SELECT, can select up to 10 choices with keys 0-9 (BLIT #7)
+  'TITLE, TEXT (lines separated by ",")
+  
+  LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),13) 'minimum 13 chars
+  LOCAL INTEGER i,cnt = 0, h = 80, retStr = s
+  LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
+  LOCAL STRING k, keysEnabled = "0123456789"
+  LOCAL STRING mark
+
+  DO WHILE FIELD$(txt, cnt+1, ",") <> ""
+    cnt = cnt + 1
+  LOOP
+  cnt = MIN(cnt, 10)
+
+  keysEnabled = LEFT$(keysEnabled, cnt) + ESC.NC + ENTER.NC
+
+  h = 16*cnt + 80
+  FOR i = 1 TO cnt
+    w = MAX(w, 8*(LEN(FIELD$(txt, i, ","))+7))
+  NEXT i
+  LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
+  
+  BLIT READ #7,dx,dy,w,h 
+  BOX dx,dy,w,h,0,b,b
+  BOX dx+3,dy+8,w-6,h-11,2,f,b
+  TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
+  FOR i = 1 TO cnt
+    IF s AND (1 << (i-1)) THEN
+      mark = TICK.NC
+    ELSE
+      mark = " "
+    ENDIF
+    TEXT dx+8,dy+8+i*16," " + STR$(i-1) + " " + mark + " " + FIELD$(txt, i, ","),"LT",8,,f,b
+  NEXT i
+  TEXT dx+w\2,dy+h-42," Set/Unset with 0-" + STR$(cnt-1) + " ","CT",8,,f,b
+  TEXT dx+w\2,dy+h-24," OK ","CT",8,,b,f
+  UI_ON.NC = 1:UI_X.NC = dx:UI_Y.NC = dy:UI_W.NC = w:UI_H.NC = h 'for screenshot
+
+  DO
+    DO
+      k = INKEY$
+    LOOP WHILE INSTR(keysEnabled,k)=0 
+    DO:LOOP WHILE INKEY$<>""
+    IF ASC(k)>47 THEN
+      retStr = retStr XOR (1<<(ASC(k)-48))
+      IF retStr AND (1<<(ASC(k)-48)) THEN
+        TEXT dx+32,dy+8+(ASC(k)-47)*16, TICK.NC,"LT",8,,f,b        
+      ELSE
+        TEXT dx+32,dy+8+(ASC(k)-47)*16, " ","LT",8,,f,b        
+      ENDIF
+    ENDIF
+  LOOP WHILE k<>ESC.NC AND k<>ENTER.NC
+
+  UI_ON.NC = 0  
+  BLIT WRITE #7,dx,dy
+  BLIT CLOSE #7
+  IF k=ENTER.NC THEN 
+    NCselect = retStr
+  ELSE
+    NCselect = s
+  ENDIF
+END FUNCTION
+
+SUB NCsetChar(s AS STRING, p AS INTEGER, c AS STRING)
+  s = LEFT$(s,p-1) + c + MID$(s, p+1)
 END SUB
 
 SUB NCerror(title AS STRING)
@@ -1015,7 +1319,7 @@ SUB NCdeleteDir(start AS STRING)
   LOCAL STRING pth(MAX_ITEMS.NC)
   LOCAL STRING toDo(MAX_ITEMS.NC)
  
-  NCwaitingON("DELETE DIR") 
+  LOCAL STRING ccc = NCwaitingON("DELETE DIR") 
   pth(ind) = start
   toDo(td) = "R" + start
   DO WHILE ind >= 0
@@ -1048,7 +1352,7 @@ SUB NCdeleteDir(start AS STRING)
       RMDIR NCfilePart(MID$(toDo(ind),2))
     ENDIF
   NEXT ind
-  NCwaitingOFF
+  NCwaitingOFF(ccc)
 END SUB
 
 FUNCTION NCfilePart(p AS STRING) AS STRING
@@ -1076,7 +1380,7 @@ SUB NCcopyDir(source AS STRING, dest AS STRING, noWarning AS INTEGER)
   
   pth(ind) = source
 
-  NCwaitingON("COPY DIR")
+  LOCAL STRING ccc = NCwaitingON("COPY DIR")
   ON ERROR SKIP
   MKDIR dest
   IF MM.ERRNO > 0 THEN 
@@ -1105,7 +1409,7 @@ SUB NCcopyDir(source AS STRING, dest AS STRING, noWarning AS INTEGER)
       LOOP
     LOOP
   
-    NCwaitingOFF
+    NCwaitingOFF(ccc)
     NCchangeDir(0,PATH.NC(0))
     NCchangeDir(1,PATH.NC(1))
     NCcursor(ACTIVE.NC,1)
@@ -1146,7 +1450,12 @@ END FUNCTION
 SUB NCinit
   'INIT
 
-  CHDIR CUR_PATH.NC
+  NCconfigLoad
+  IF CFG_HighColor.NC THEN
+    MODE 1,16
+  ELSE
+    MODE 1,8
+  ENDIF
 
   CURSOR.NC(0) = 0
   CURSOR.NC(1) = 0       'left and right cursor
@@ -1157,7 +1466,7 @@ SUB NCinit
   PATH.NC(0) = CUR_PATH.NC                   'left path
   PATH.NC(1) = CUR_PATH.NC                  'right path
 
-  LOAD FONT "AtariST.FNT"
+  LOAD FONT NC_PATH.NC + "AtariST.FNT"
   FONT #8,1
   CLS
   NCsetMenu(0, "Help", 1)
@@ -1170,7 +1479,7 @@ SUB NCinit
   NCsetMenu(7, "Delete", 1)
   NCsetMenu(8, "RESERV", 0) 'Un/TAR
   NCsetMenu(9, "QuitNC", 1)
-  NCsetMenu(10,"RESERV", 0)
+  NCsetMenu(10,"Config", 1)
   NCsetMenu(11,"LP=RP", 1)
  
   NCdrawMenu
@@ -1229,7 +1538,7 @@ SUB NCviewHEX(filePath AS STRING)
       FOR i = 0 TO MIN(LEN(li)-1,15)
         b = ASC(MID$(li,i+1,1))
         TEXT 80+i*32,firstRow + row, HEX$(b,2),"LT",8,,RGB(BLACK), RGB(CYAN)
-        IF b>=32 THEN
+        IF b>=32 AND b<=127 THEN
           TEXT 600+i*8,firstRow + row, CHR$(b),"LT",8,,RGB(BLACK), RGB(CYAN)
         ELSE
           TEXT 600+i*8,firstRow + row, ".","LT",8,,RGB(BLACK), RGB(CYAN)
@@ -1239,7 +1548,7 @@ SUB NCviewHEX(filePath AS STRING)
       cnt = cnt + 16
     LOOP
     
-    DO WHILE change = 0 AND k<>CHR$(27)
+    DO WHILE change = 0 AND k<>ESC.NC
       DO: k = INKEY$: LOOP WHILE k=""
       IF k=CHR$(136) THEN
         'Page UP
@@ -1257,7 +1566,7 @@ SUB NCviewHEX(filePath AS STRING)
 
       ENDIF
     LOOP
-  LOOP WHILE k<>CHR$(27)
+  LOOP WHILE k<>ESC.NC
   CLOSE #3
   NCredrawPane(0)
   NCredrawPane(1)  
@@ -1276,12 +1585,24 @@ SUB NCviewTXT(filePath AS STRING)
   TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(BLACK)
   TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(BLACK)
 
-  LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, pg = 0, maxpage = 0, viewpage = 0, change = 0
+  LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, pg = 0, crPos, lfPos
+  LOCAL INTEGER maxpage = 0, viewpage = 0, change = 0
   LOCAL STRING li, k
 
   OPEN filePath FOR INPUT AS #3
   DO WHILE NOT EOF(#3)
+    'li = INPUT$(100, #3)
+    'crPos = INSTR(li, CR.NC)
+    'IF crPos > 0 THEN li = LEFT$(li, crPos - 1)
+    'lfPos = INSTR(li, LF.NC)
+    'IF lfPos > 0 THEN li = LEFT$(li, lfPos - 1)  
+    ON ERROR SKIP
     LINE INPUT #3, li
+    IF MM.ERRNO>0 THEN
+      NCwarning("TXT VIEWER", "Too long lines")
+      CLOSE #3
+      EXIT SUB
+    ENDIF
     cnt = cnt + 1
     IF (cnt MOD 35) = 0 THEN 
       pg = pg + 1
@@ -1298,6 +1619,11 @@ SUB NCviewTXT(filePath AS STRING)
   
     OPEN filePath FOR INPUT AS #3
     DO WHILE pg<viewpage AND NOT EOF(#3)
+      'li = INPUT$(100, #3)
+      'crPos = INSTR(li, CR.NC)
+      'IF crPos > 0 THEN li = LEFT$(li, crPos - 1)
+      'lfPos = INSTR(li, LF.NC)
+      'IF lfPos > 0 THEN li = LEFT$(li, lfPos - 1)  
       LINE INPUT #3, li
       cnt = cnt + 1
       IF (cnt MOD 35) = 0 THEN 
@@ -1310,6 +1636,11 @@ SUB NCviewTXT(filePath AS STRING)
 
     row = 0
     DO WHILE (row < 35*16) AND NOT EOF(#3)
+      'li = INPUT$(100, #3)
+      'crPos = INSTR(li, CR.NC)
+      'IF crPos > 0 THEN li = LEFT$(li, crPos - 1)
+      'lfPos = INSTR(li, LF.NC)
+      'IF lfPos > 0 THEN li = LEFT$(li, lfPos - 1)  
       LINE INPUT #3, li
       IF LEN(li)>100 THEN li = LEFT$(li,100)
       TEXT 0,firstRow + row, li,"LT",8,,RGB(BLACK), RGB(CYAN)
@@ -1317,7 +1648,7 @@ SUB NCviewTXT(filePath AS STRING)
     LOOP
     CLOSE #3
 
-    DO WHILE change = 0 AND k<>CHR$(27)
+    DO WHILE change = 0 AND k<>ESC.NC
       DO: k = INKEY$: LOOP WHILE k=""
       IF k=CHR$(136) THEN
         'Page UP
@@ -1333,23 +1664,27 @@ SUB NCviewTXT(filePath AS STRING)
         ENDIF
       ENDIF
     LOOP
-  LOOP WHILE k<>CHR$(27)
+  LOOP WHILE k<>ESC.NC
   NCredrawPane(0)
   NCredrawPane(1)  
   NCcursor(ACTIVE.NC,1)
   NCdrawMenu
 END SUB
+
 SUB NCview
   'parrent for viewer
 
   LOCAL STRING k, ex = UCASE$(NCgetExtension(MID$(SELECTED.NC,2))), exViewer
-  CONST en = CHR$(27)
 
   SELECT CASE ex
     CASE "TXT", "BAS", "BAK", "INC", "FNT"
       'text view
-      NCviewTXT(CUR_PATH.NC + MID$(SELECTED.NC,2))
-      
+      IF KEYDOWN(7) AND 1 THEN 'ALT F3 force HEX
+        NCviewHEX(CUR_PATH.NC + MID$(SELECTED.NC,2))
+      ELSE
+        NCviewTXT(CUR_PATH.NC + MID$(SELECTED.NC,2))
+      ENDIF
+
     CASE "BMP"
       NCviewBMP(CUR_PATH.NC + MID$(SELECTED.NC,2))
 
@@ -1358,13 +1693,19 @@ SUB NCview
       NCwarning("IMAGE VIEW", "Viewer not available yet...")
 
     CASE ELSE
-      exViewer = "EXTview" + ex
       EXT_ERR.NC = -1
-      ON ERROR SKIP
-      CALL exViewer, CUR_PATH.NC + MID$(SELECTED.NC,2)
+      IF CFG_ExtView.NC THEN
+        exViewer = "EXTview" + ex
+        ON ERROR SKIP
+        CALL exViewer, CUR_PATH.NC + MID$(SELECTED.NC,2)
+      ENDIF
       IF EXT_ERR.NC < 0 THEN
         'fallback to HEX view
-        NCviewHEX(CUR_PATH.NC + MID$(SELECTED.NC,2))
+        IF CFG_TXTfb.NC THEN
+          NCviewTXT(CUR_PATH.NC + MID$(SELECTED.NC,2))
+        ELSE
+          NCviewHEX(CUR_PATH.NC + MID$(SELECTED.NC,2))
+        ENDIF
       ELSE
         'external viewer was available
         NCredrawPane(0)
@@ -1378,9 +1719,9 @@ END SUB
 
 SUB NCviewBMP(filePath AS STRING)
   LOCAL STRING b
-  LOCAL INTEGER w, h, bpp, nw, nh
+  LOCAL INTEGER tw, w, h, bpp, nw, nh
 
-  NCwaitingON("BMP VIEW")
+  LOCAL STRING ccc = NCwaitingON("BMP VIEW")
   OPEN filePath FOR INPUT AS #3
   b = INPUT$(2, #3)
   SELECT CASE b
@@ -1408,64 +1749,214 @@ SUB NCviewBMP(filePath AS STRING)
         nw = nw*500/nh
         nh = 500
       ENDIF
-      NCwaitingOFF
-      BOX (800-nw)/2-4, (600-nh)/2-4,nw+8,nh+28,0,RGB(YELLOW),RGB(YELLOW)
-      BOX (800-nw)/2-3, (600-nh)/2-3,nw+6,nh+26,2,RGB(BLACK)
-      LINE (800-nw)/2-3, (600-nh)/2+nh+2,400+nw/2+3,(600-nh)/2+nh+2,2,RGB(BLACK)    
+      NCwaitingOFF(ccc)
+      BOX (800-nw)/2-4, (600-nh)/2-5,nw+8,nh+10,0,RGB(GREEN),RGB(GREEN)
+      BOX (800-nw)/2-4, (600-nh)/2-5,nw+8,nh+10,2,RGB(BLACK)
+
+      tw = 8*LEN(filePath+", "+STR$(w)+"x"+STR$(h)+", "+STR$(bpp)+"bpp")      
+      BOX (800-tw)/2-4, (600-nh)/2+4+nh,tw+8,24,0,RGB(GREEN),RGB(GREEN)
+      BOX (800-tw)/2-4, (600-nh)/2+4+nh,tw+8,24,2,RGB(BLACK)
       IMAGE RESIZE 0,0,w,h,(800-nw)/2, (600-nh)/2,nw,nh,2
-      TEXT 400,(600-nh)/2+nh+4,filePath+", "+STR$(w)+"x"+STR$(h)+", "+STR$(bpp)+"bpp","CT",8,,RGB(BLACK), RGB(YELLOW)          
+      TEXT 400,(600-nh)/2+nh+8,filePath+", "+STR$(w)+"x"+STR$(h)+", "+STR$(bpp)+"bpp","CT",8,,RGB(BLACK), RGB(GREEN)
       PAGE WRITE 0
       PAGE COPY 1 TO 0
+
+
   END SELECT
-  DO:LOOP WHILE INKEY$<>CHR$(27)  
+  DO:LOOP WHILE INKEY$=""  
   NCredrawPane(0)
   NCredrawPane(1)  
   NCcursor(ACTIVE.NC,1)
   NCdrawMenu
 END SUB
 
-SUB NCcompress(source AS STRING, dest AS STRING)
-  LOCAL INTEGER cnt(255), ind(255),i, dif = 0, ex = 1
-  LOCAL STRING c
+SUB NCsaveTGA(pg AS INTEGER,xx AS INTEGER,yy AS INTEGER,ww AS INTEGER,hh AS INTEGER,f AS STRING)
+  CONST id = "Napoleon Commander by JirSoft"
+  LOCAL INTEGER i, pal, r, g, b, x, y
 
-  OPEN source FOR INPUT AS #3
-    DO WHILE NOT EOF(#3)
-      c = INPUT$(1, #3)
-      INC cnt(ASC(c))
-    LOOP 
+  TIMER = 0  
+  '800x600x16bpp
+  OPEN f+".TGA" FOR OUTPUT AS #3
+    'TGA header
+    ?#3,BIN2STR$(UINT8, LEN(id)); 'ID length
+    ?#3,BIN2STR$(UINT8, 0);       'no color map is present
+    ?#3,BIN2STR$(UINT8, 2);       'uncompressed true color image
+    ?#3,BIN2STR$(UINT16, 0);      'first palette entry
+    ?#3,BIN2STR$(UINT16, 0);      'entries in color map
+    ?#3,BIN2STR$(UINT8, 0);       'color map bpp
+
+    ?#3,BIN2STR$(UINT16, 0);      'lower left X
+    ?#3,BIN2STR$(UINT16, 600);    'lower left Y
+    ?#3,BIN2STR$(UINT16, ww);     'image width
+    ?#3,BIN2STR$(UINT16, hh);     'image height
+    ?#3,BIN2STR$(UINT8, 16);      'pixel depth
+    ?#3,BIN2STR$(UINT8, &b00100000); 'image description, 0,0 is on TOP LEFT
+
+    ?#3,id; 'image ID
+
+    FOR y = 0 TO hh-1
+      FOR x = 0 TO ww-1
+        pal = PIXEL(x,y)
+        r = (pal AND &hFF0000)>>19 
+        g = (pal AND &hFF00)>>10 
+        b = (pal AND &hFF)>>3 
+        ?#3,BIN2STR$(UINT16, (r<<11) OR (g<<5) OR b);  'image pixel              
+      NEXT x
+    NEXT y
+
   CLOSE #3
-  CLS
-  FOR i = 0 TO 255
-    ind(i) = i
-    IF cnt(i) > 0 THEN 
-      '?i":"cnt(i),
-      INC dif
-    ENDIF
-  NEXT i
-  DO WHILE ex < dif
-    ex = 2*ex
-  LOOP
-  ex=ex-1
-  LOCAL INTEGER HUF(ex-1)
-  dif = dif - ex
-  SORT cnt(),ind()
-  FOR i = 255  TO 0 STEP -1
-    HUF(255-i) = ind(i)
-    IF cnt(i) = 0 THEN EXIT FOR
-  NEXT i
-  FOR i=0 TO ex-1
-    ind(HUF(i))=i
-  NEXT i
-  'MATH V_PRINT HUF()
-  MMDEBUG BREAK
-  OPEN source FOR INPUT AS #3
-    DO WHILE NOT EOF(#3)
-      c = INPUT$(1, #3)
+  ? TIMER
+END SUB
+
+SUB NCsaveRLE(pg AS INTEGER,xx AS INTEGER,yy AS INTEGER,ww AS INTEGER,hh AS INTEGER,f AS STRING)
+  CONST id = "Napoleon Commander by JirSoft"
+  LOCAL INTEGER i, pal, r, g, b 
+  LOCAL INTEGER x, y, status, count, sample
+  LOCAL STRING buf1, buf2, buf3, buf4
+
+  TIMER = 0  
+  '800x600x16bpp
+  OPEN f+".TGA" FOR OUTPUT AS #3
+    'TGA header
+    ?#3,BIN2STR$(UINT8, LEN(id)); 'ID length
+    ?#3,BIN2STR$(UINT8, 0);       'no color map is present
+    ?#3,BIN2STR$(UINT8, 10);      'compressed true color image
+    ?#3,BIN2STR$(UINT16, 0);      'first palette entry
+    ?#3,BIN2STR$(UINT16, 0);      'entries in color map
+    ?#3,BIN2STR$(UINT8, 0);       'color map bpp
+
+    ?#3,BIN2STR$(UINT16, 0);      'lower left X
+    ?#3,BIN2STR$(UINT16, 600);    'lower left Y
+    ?#3,BIN2STR$(UINT16, ww);     'image width
+    ?#3,BIN2STR$(UINT16, hh);     'image height
+    ?#3,BIN2STR$(UINT8, 16);      'pixel depth
+    ?#3,BIN2STR$(UINT8, &b00100000); 'image description, 0,0 is on TOP LEFT
+
+    ?#3,id; 'image ID
+
+    FOR y = 0 TO hh-1
+
+      buf1 = ""
+      buf2 = ""
+      buf3 = ""
+      buf4 = ""
+      x = 0
+      status = 0
+      count = 0
       
-    LOOP 
+      DO
+        SELECT CASE status
+          CASE 0  'undefined
+            sample = PIXEL(x, y)
+            IF y = hh-1 THEN
+              
+              NCputBuf(buf1, buf2, buf3, buf4, CHR$(0) + BIN2STR$(UINT16, NC24to16(sample)))
+              EXIT DO
+            ENDIF
+            count = 0
+            IF sample = PIXEL(x+1,y) THEN
+              status = 1 'building RLE
+            ELSE
+              status = 2 'building non-RLE
+            ENDIF
+          
+          CASE 1  'RLE
+            IF sample = PIXEL(x,y) THEN
+              IF count = 128 THEN'block full
+                NCputBuf(buf1, buf2, buf3, buf4, CHR$(255) + BIN2STR$(UINT16, NC24to16(sample)))
+                count = 0
+                status = 0
+              ELSE
+                INC count
+                INC x
+              ENDIF
+            ELSE
+              NCputBuf(buf1, buf2, buf3, buf4, CHR$(127+count) + BIN2STR$(UINT16, NC24to16(sample)))
+              count = 0
+              status = 0
+            ENDIF
+
+          CASE ELSE 'non RLE
+            IF PIXEL(x,y) = PIXEL(x+1,y) THEN 'end of non RLE
+              NCputBuf(buf1, buf2, buf3, buf4, CHR$(count-1))
+              FOR j = x-count TO x-1
+                NCputBuf(buf1, buf2, buf3, buf4, BIN2STR$(UINT16, NC24to16(PIXEL(j,y))))
+              NEXT j
+              count = 0
+              status = 0
+            ELSE
+              IF count = 128 THEN 'block full
+                NCputBuf(buf1, buf2, buf3, buf4, CHR$(127))
+                FOR j = x-128 TO x-1
+                  NCputBuf(buf1, buf2, buf3, buf4, BIN2STR$(UINT16, NC24to16(PIXEL(j,y))))
+                NEXT j
+                count = 0
+                status = 0
+              ELSE
+                INC count
+                INC x
+              ENDIF              
+            ENDIF
+        END SELECT
+      LOOP UNTIL x = ww
+
+      IF x=ww THEN
+        IF status=1 THEN
+          NCputBuf(buf1, buf2, buf3, buf4, CHR$(127+count) + BIN2STR$(UINT16, NC24to16(sample)))
+        ELSE
+          NCputBuf(buf1, buf2, buf3, buf4, CHR$(count-1))
+          FOR j = x-count TO x-1
+            NCputBuf(buf1, buf2, buf3, buf4, BIN2STR$(UINT16, NC24to16(PIXEL(j,y))))
+          NEXT j
+        ENDIF
+      ENDIF
+      ?#3, buf1;buf2;buf3;buf4;
+    NEXT y
   CLOSE #3
-  
-  DO:LOOP WHILE INKEY$=""
+  ? TIMER
+END SUB
+
+SUB NCputBuf(b1 AS STRING, b2 AS STRING, b3 AS STRING, b4 AS STRING, what AS STRING)
+  IF LEN(b1) < 240 THEN
+    CAT b1, what
+  ELSEIF LEN(b2) < 240 THEN
+    CAT b2, what
+  ELSEIF LEN(b3) < 240 THEN
+    CAT b3, what
+  ELSE    
+    CAT b4, what
+  ENDIF
+END SUB
+
+FUNCTION NC24to16(pix AS INTEGER)  
+  LOCAL INTEGER r = (pal AND &hFF0000)>>19 
+  LOCAL INTEGER g = (pal AND &hFF00)>>10 
+  LOCAL INTEGER b = (pal AND &hFF)>>3
+  NC24to16 = (r<<11) OR (g<<5) OR b
+END FUNCTION
+
+SUB NCnapoleon(x AS INTEGER, y AS INTEGER)
+  LOCAL INTEGER i,j=0
+  LOCAL STRING s
+
+  ON ERROR SKIP
+  OPEN NC_PATH.NC + "NAPOLEON.ICN" FOR INPUT AS #5
+  IF MM.ERRNO = 0 THEN
+    DO WHILE NOT EOF(#5)
+      LINE INPUT #5,s
+      FOR i = 1 TO LEN(s)
+        IF MID$(s,i,1)<>" " THEN
+          PIXEL x+i-1,y+j,RGB(BLACK)
+        ENDIF
+      NEXT i
+      INC j
+    LOOP
+    CLOSE #5
+  ENDIF
+END SUB
+
+SUB test
+  NCsaveRLE(0,0,0,800,600,"b")
 END SUB
 
 

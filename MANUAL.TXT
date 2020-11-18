@@ -6,9 +6,12 @@
  1. PANES
  App is controlled by 2 panes (left and right), any of them can be switched into active state with
  TAB, Active one has "cursor" (inverse line of text) and header (inverse again). On active pane can
- be moved cursor by keys UP/DOWN (1 line) or HOME/END (first/last line).
+ be moved cursor by keys UP/DOWN (1 line) or HOME/END (first/last line). When key A-Z are pressed,
+ then is selected first file that begins witch pressed char (when exists).
  Cursor then marks ACTIVE ITEM. RED cursor means HIDDEN file (begins with '.'), hidden files and 
- folder can be shown/hidden with key 'H'.
+ folder can be shown/hidden with key 'H' (SHIFT + h), status is shown bottom left.
+ Normally are the items in pane sorted (can be switched off with SHIFT+U, status shown bottom left)
+ and with DIRs before FILEs (can be set in CONFIGURATION).
 
  2. ACTIVE ITEM
  With active item can you do several ACTIONS, some of them depends on differenc between panes. Most
@@ -30,25 +33,29 @@
 
 
 
-
-
-
  For same actions, just source file or folder is needed.
    
   GET SIZE  Calculate size and number of items for folder, for file just returns size.
  
-  VIEWER    Shows file as text or HEX, image viewer is missing yet. Thanks great Peter Mather's
-            work - in this case SUBs CALL, it can be later extended for external viewers based on
-            file extension. Doesn't work for folders, but is not limited by file size (maybe just
-            with speed/slowness...)
+  VIEWER    Shows file as text or HEX (HEX can be forced with ALT+F3), image viewer works now just
+            for BMP files. Thanks great Peter Mather's work - in this case SUBs CALL, NC can be
+            later extended for external viewers based on file extension. Viewer not work on dirs,
+            but is not limited by file size (maybe just with speed/slowness...)
 
   EDITOR    Extension of the VIEWER, not done (yet?).
 
   MAKE DIR  Create new folder in active directory.
 
 
+ SCREENSHOT function (PRINT SCREEN) works a little bit strange (because of IMAGE SAVE limitation)
+            - after key press screenshot is made to memory and later saved to disk. With pressing 
+            of LEFT ALT+PRINT SCREEN could be "shooted" just dialog window (when's open).
+
+ Some of the settings can be changed with F11 (CONFIGURATION), stored in CFG file and loaded every
+ program start - feel free to play with them.
+  
  That's it, nothing more to show. If you got tired, simply press F10 and the app will quit...
 
-                                                                                 JirSoft@jirsoft.eu 
+                                                                                 JirSoft@JirSoft.eu 
 
   
