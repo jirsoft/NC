@@ -3,6 +3,11 @@
 
 Simple parody on Norton (Volkov...) commanders for Colour Maximite 2
 
+#### v0.41
+	TUI separated
+	better logo
+	bugfixes
+
 #### v0.40
 	better screen output (less flicker)
 	CONFIG (with save)
