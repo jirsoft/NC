@@ -2,7 +2,12 @@
  Napoleon Ccommander
 
 Simple parody on Norton (Volkov...) commanders for Colour Maximite 2
-
+#### v0.60
+	a-z key jumps first to DIR, second to FILE
+	waiting dialog has progress bar
+	ALT+F1/F2 choose source for panes: either SERVER or SD card
+	bugfixes
+	
 #### v0.41
 	TUI separated
 	better logo
