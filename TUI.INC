@@ -54,22 +54,10 @@ FUNCTION TUIwaitingON(title AS STRING) AS STRING
   TEXT dx+w\2,dy+24,txt,"CT",8,,f,b
   ON.TUI = 1: X.TUI = dx: Y.TUI = dy: W.TUI = w: H.TUI = h 'for screenshot
 
-  TUIwaitingON = STR$(dx) + "," + STR$(dy) + "," + STR$(w) + "," + STR$(h)
+  TUIwaitingON = STR$(dx) + "," + STR$(dy)  
 END FUNCTION
 
-SUB TUIwaitingProgress(coord AS STRING, perc AS INTEGER)
-  'Draw progress into waiting dialog
-
-  LOCAL INTEGER dx = VAL(FIELD$(coord,1,","))
-  LOCAL INTEGER dy = VAL(FIELD$(coord,2,","))
-  LOCAL INTEGER w = VAL(FIELD$(coord,3,","))
-  LOCAL INTEGER h = VAL(FIELD$(coord,4,","))
-  
-  BOX dx + w \ 2 - 50, dy + 18, 100, 4, 1, RGB(BLACK)
-  BOX dx + w \ 2 - 50, dy + 18, perc, 4, 0, RGB(BLACK), RGB(BLACK)
-END SUB
-
-SUB TUIwaitingOFF(coord AS STRING)
+SUB NCwaitingOFF(coord AS STRING)
   'Finish progress (BLIT #2)
 
   LOCAL INTEGER dx = VAL(FIELD$(coord,1,","))
@@ -181,7 +169,7 @@ END FUNCTION
 FUNCTION TUIinput(title AS STRING, txt AS STRING, def AS STRING, en AS STRING) AS STRING
   'Input string, returns text, DEL erase all, BACKSPACE 1 char, ENTER to finish (BLIT #6)
  
-  LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),LEN(txt),LEN(def),23) 'minimum 8 chars
+  LOCAL INTEGER w = 16 + 8*MAX(4+LEN(title),LEN(txt),LEN(def),8) 'minimum 8 chars
   LOCAL INTEGER h = 100, change = 0
   LOCAL STRING k = ""
   LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
