@@ -42,19 +42,19 @@ while True:
 			out('LIFE TEST')
 			ser.write('OK\n'.encode('ASCII'))
     		
-    	#missing
+		#missing
 		elif ch[0] == 'W':
 			out('WRITE FILE')
     		
-    	#missing
+		#missing
 		elif ch[0] == 'R':
 			out('READ FILE')
     		
-    	#missing
+		#missing
 		elif ch[0] == 'C':
 			out('COPY FILE')
     		
-    	#traverse directory
+		#traverse directory
 		elif ch[0] == 'D':
 			out('DIRECTORY ' + ch[1:])
 			CURDIR = ch[4:]
@@ -92,11 +92,11 @@ while True:
 				ret += '\n'
 				ser.write(ret.encode('ASCII'))
     	
-    	#missing
+		#missing
 		elif ch[0] == 'M':
 			out('MAKE DIRECTORY')
     		
-    	#missing
+		#missing
 		elif ch[0] == 'K':
 			out('KILL')
     		
