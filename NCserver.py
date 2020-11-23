@@ -36,19 +36,25 @@ while True:
 	ch = ser.read_until().decode('ASCII')[:-1]
 	
 	if len(ch) > 0:
+	
+		#is server alive
 		if ch[0] == '?':
 			out('LIFE TEST')
 			ser.write('OK\n'.encode('ASCII'))
     		
+    	#missing
 		elif ch[0] == 'W':
 			out('WRITE FILE')
     		
+    	#missing
 		elif ch[0] == 'R':
 			out('READ FILE')
     		
+    	#missing
 		elif ch[0] == 'C':
 			out('COPY FILE')
     		
+    	#traverse directory
 		elif ch[0] == 'D':
 			out('DIRECTORY ' + ch[1:])
 			CURDIR = ch[4:]
@@ -86,9 +92,11 @@ while True:
 				ret += '\n'
 				ser.write(ret.encode('ASCII'))
     	
+    	#missing
 		elif ch[0] == 'M':
 			out('MAKE DIRECTORY')
     		
+    	#missing
 		elif ch[0] == 'K':
 			out('KILL')
     		
