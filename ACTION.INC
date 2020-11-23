@@ -10,7 +10,7 @@
 
 'EXAMPLE
 SUB EXTactionBIN(filePath AS STRING)
-  NCwarning("BIN action", "Example of actionr for BIN files'")
+  TUIwarning("BIN action", "Example of actionr for BIN files'")
   EXT_ERR.NC = -1 'fallback to internal action, normally will be here EXT_ERR.NC = 0
 END SUB
 
@@ -18,9 +18,11 @@ SUB EXTactionMAR(filePath AS STRING)
   CONST maxChunkSize = 128
   LOCAL INTEGER fiLen, curLen = 0, chunkLen
   LOCAL STRING li, cmd, par, k, p = PATH.NC(1-ACTIVE.NC)
+  LOCAL STRING dialog
+
   EXT_ERR.NC = 0
 
-  IF NCquestion("EXTRACT MAR", "Extract '" +filePath + "' to '" + p + "'?") THEN
+  IF TUIquestion("EXTRACT MAR", "Extract '" +filePath + "' to '" + p + "'?") THEN
     OPEN filePath FOR INPUT AS #3
     DO WHILE NOT EOF(#3)
       LINE INPUT #3, li
@@ -40,14 +42,12 @@ SUB EXTactionMAR(filePath AS STRING)
             NCerror("DIR '" + p + "' ERROR")
             EXIT SUB
           ENDIF
-          'NCwarning("MAKE DIR", p)
     
         CASE "FILE"
-          NCwaitingON("CREATE FILE "+par)
+          dialog = TUIwaitingON("CREATE FILE "+par)
           curLen = 0
           LINE INPUT #3, li
           fiLen = VAL(li)
-          'NCwarning("CREATE FILE", p + par)
           OPEN p+par FOR OUTPUT AS #4
           DO WHILE curLen < fiLen        
             chunkLen = MIN(fiLen - curLen,maxChunkSize)
@@ -56,15 +56,13 @@ SUB EXTactionMAR(filePath AS STRING)
             PRINT #4,li;
           LOOP
           CLOSE #4
-          NCwaitingOFF
+          TUIwaitingOFF(dialog)
 
         CASE "ENDDIR"
-          p = NCparrent(p)
-          'NCwarning("END DIR", p)
+          p = NCparent(p)
 
                 
         CASE "ENDARCHIVE"
-          'NCwarning("END ARCHIVE","")
               
       END SELECT
 
