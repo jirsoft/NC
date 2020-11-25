@@ -10,7 +10,7 @@
 
 'EXAMPLE
 SUB EXTviewBIN(filePath AS STRING)
-  NCwarning("BIN VIEW", "Example of viewer for BIN files'")
+  TUIwarning("BIN VIEW", "Example of viewer for BIN files'")
   EXT_ERR.NC = -1 'fallback to internal viewer, normally will be here EXT_ERR.NC = 0
 END SUB
 
@@ -19,6 +19,8 @@ SUB EXTviewMAR(filePath AS STRING)
   LOCAL INTEGER firstRow = 16+4, row = 0, fiLen, curLen = 0, chunkLen
   LOCAL STRING li, cmd, par, k
   LOCAL INTEGER indent = 0, pg = 1
+  LOCAL STRING dialog
+  
   EXT_ERR.NC = 0
 
   CLS
@@ -46,7 +48,7 @@ SUB EXTviewMAR(filePath AS STRING)
         row = row + 16 
     
       CASE "FILE"
-        NCwaitingON("READ FILE")
+        dialog = TUIwaitingON("READ FILE")
         curLen = 0
         LINE INPUT #3, li
         fiLen = VAL(li)
@@ -57,11 +59,11 @@ SUB EXTviewMAR(filePath AS STRING)
           curLen = curLen + chunkLen
           li = INPUT$(chunkLen, #3)
         LOOP
-        NCwaitingOFF
+        TUIwaitingOFF(dialog)
 
       CASE "ENDDIR"
-        TEXT 0,firstRow + row, SPACE$(2*indent) + "END DIR","LT",8,,RGB(BLACK), RGB(CYAN)
         indent = indent - 2
+        TEXT 0,firstRow + row, SPACE$(2*indent) + "END DIR","LT",8,,RGB(BLACK), RGB(CYAN)
         row = row + 16 
         
       CASE "ENDARCHIVE"

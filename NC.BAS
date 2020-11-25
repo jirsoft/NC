@@ -4,18 +4,19 @@ OPTION EXPLICIT
 OPTION DEFAULT NONE
 OPTION BASE 0
 
-CONST VERSION = "0.61"
+CONST VERSION = "0.63"
 
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = NCgetPath(MM.INFO$(CURRENT))     'path to NC executable
 
-initDebug
+'#DBGinitDebug
 NCchdir NC_PATH.NC
 
 #INCLUDE "TUI.INC"
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
+CONST RIGHT.NC = " " + CHR$(227) + " " 'right arrow
 CONST FILECHARS.NC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()_-."
 CONST MAX_ITEMS.NC = 500 'max number of items in pane
 CONST MAX_ROWS.NC = 32   'max row in list display
@@ -25,15 +26,14 @@ CONST CR.NC = CHR$(13)
 CONST LF.NC = CHR$(10)
 CONST INFO.NC = "FILEINFO.TXT"
 CONST SERIAL_TIMEOUT.NC = 300
-CONST SERIAL_INIT.NC = "COM3:691200,1024"
-'CONST SERIAL_INIT.NC = "COM3:460800,1024"
-'CONST SERIAL_INIT.NC = "COM3:230400,1024"
-CONST SERIAL_NUM.NC = 1
+DIM STRING SERIAL_INIT.NC = "COM3:230400,1024"
 DIM STRING SERIAL_IN.NC = ""
 DIM STRING SERIAL_PATH.NC = ""
 DIM INTEGER SERIAL_ON.NC = 0
 
-DIM STRING NULL.NC 
+DIM STRING NULL_S.NC 
+DIM INTEGER ALT.NC = 0
+DIM INTEGER NULL_I.NC 
 DIM STRING STORE.NC
 DIM STRING COMPLETE.NC   'current selected item
 DIM STRING SELECTED.NC   'current selected item name
@@ -66,6 +66,7 @@ DIM INTEGER CFG_ESCup.NC = 0
 DIM INTEGER CFG_DirFil.NC = 0
 DIM INTEGER CFG_TXTfb.NC = 0
 DIM INTEGER CFG_HighColor.NC = 0
+DIM INTEGER CFG_FastSerial.NC = 0
 DIM INTEGER CFG.NC
 
 NCinit
@@ -78,6 +79,7 @@ NCcursor(0,1)
 
 ON KEY 157, NCprintScreen
 DIM STRING kk
+DIM INTEGER keyPress
 DO
   IF SS.NC <> "" THEN 'screenshot was prepared
     PAGE COPY 0 TO 1
@@ -92,15 +94,20 @@ DO
   ENDIF
 
   kk = INKEY$
-  IF kk <> "" THEN NCkey(ASC(kk))
+  IF kk <> "" THEN
+    ALT.NC = KEYDOWN(7)
+    ALT.NC = (ALT.NC AND 1) OR (ALT.NC AND 16)
+    keyPress = ASC(kk)
+    DO WHILE KEYDOWN(0) <> 0:LOOP
+    NCkey(keyPress)    
+  ENDIF
 LOOP
 END
 
 SUB NCprintScreen
   'store screenshot into memory
 
-  IF NCisSerial(ACTIVE.NC) THEN
-  ELSE
+  IF NOT NCisSerial(0) AND NOT NCisSerial(1) THEN
     IF SS.NC = "" THEN
       IF (KEYDOWN(7) AND 1) AND ON.TUI THEN 'LEFT ALT, DIALOG screemshot
         SS.NC = STR$(X.TUI) + "," + STR$(Y.TUI) + "," + STR$(W.TUI) + "," + STR$(H.TUI)
@@ -146,7 +153,6 @@ END FUNCTION
 
 SUB NCkey(kk AS INTEGER)
   'main SUB for key control
-
   LOCAL STRING ccc
   
   SELECT CASE kk
@@ -161,7 +167,7 @@ SUB NCkey(kk AS INTEGER)
 
     CASE 27  'ESC
       IF CFG_ESCup.NC THEN
-        IF LEFT$(PATH.NC(ACTIVE.NC),1) = "S" THEN
+        IF NCisSerial(ACTIVE.NC) THEN
           IF LEFT$(ITEM.NC(ACTIVE.NC,0),3) = "D.." THEN
             'serial port
             NCserialOut("C..")
@@ -190,9 +196,9 @@ SUB NCkey(kk AS INTEGER)
       NCheader(ACTIVE.NC, PATH.NC(ACTIVE.NC))
       NCcursor(ACTIVE.NC,1)
 
-    CASE 10   'ENTER
+    CASE 10, 13   'ENTER
       SELECTED.NC = FIELD$(ITEM.NC(ACTIVE.NC,CURSOR.NC(ACTIVE.NC)+POS.NC(ACTIVE.NC)),1,"|") 
-      IF LEFT$(SELECTED.NC,1) = "D" THEN
+      IF NCisDir(SELECTED.NC) THEN
         IF NCisSerial(ACTIVE.NC) THEN
           'serial port
           IF RIGHT$(SELECTED.NC,2) = ".." THEN
@@ -223,7 +229,7 @@ SUB NCkey(kk AS INTEGER)
 
     CASE 145  'F1
       IF EN_MENU.NC(0) THEN
-        IF (KEYDOWN(7) AND 1) THEN
+        IF ALT.NC THEN
           HLP.NC = TUIchoice("LEFT PANE","A:/,S:/")
           SELECT CASE HLP.NC
             CASE 0            
@@ -250,7 +256,7 @@ SUB NCkey(kk AS INTEGER)
 
     CASE 146  'F2
       IF EN_MENU.NC(1) THEN
-        IF (KEYDOWN(7) AND 1) THEN
+        IF ALT.NC THEN
           HLP.NC = TUIchoice("RIGHT PANE","A:/,S:/")
           SELECT CASE HLP.NC
             CASE 0
@@ -275,8 +281,8 @@ SUB NCkey(kk AS INTEGER)
         ELSE
           IF NOT NCisSerial(ACTIVE.NC) THEN          
             IF SELECTED.NC <> "D.." THEN
-              IF LEFT$(SELECTED.NC,1)="D" THEN
-                ccc = TUIwaitingON("GET SIZE")
+              IF NCisDir(SELECTED.NC) THEN
+                ccc = TUIwaitingON("GET INFO")
                 HLP.NC = NCmeasure(CUR_PATH.NC+MID$(SELECTED.NC,2))
                 TUIwaitingOFF(ccc)     
                 TUIwarning("GET INFO","'"+MID$(SELECTED.NC,2)+"' has "+STR$(HLP.NC>>16,0,0)+" bytes in " + STR$(HLP.NC AND &hFFFF,0,0)+" items")
@@ -291,7 +297,7 @@ SUB NCkey(kk AS INTEGER)
     CASE 147  'F3
       IF EN_MENU.NC(2) THEN
         IF NOT NCisSerial(ACTIVE.NC) THEN
-          IF LEFT$(SELECTED.NC,1)="F" THEN
+          IF NOT NCisDir(SELECTED.NC) THEN
             NCview
           ENDIF
         ENDIF
@@ -305,7 +311,7 @@ SUB NCkey(kk AS INTEGER)
     CASE 149  'F5
       IF EN_MENU.NC(4) THEN
         IF NCisSerial(0) OR NCisSerial(1) THEN
-          IF LEFT$(SELECTED.NC,1)="D" THEN
+          IF NCisDir(SELECTED.NC) THEN
             IF NCinsideTest(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2)+"/",PATH.NC(1-ACTIVE.NC)+MID$(SELECTED.NC,2)+"/") THEN
               TUIwarning("COPY DIR ","Copy something into itself is VERY bad idea!")
             ELSE
@@ -316,7 +322,7 @@ SUB NCkey(kk AS INTEGER)
           ENDIF
         ELSE
           IF LEFT$(SELECTED.NC,3)<>"D.." THEN
-            IF PATH.NC(0)=PATH.NC(1) THEN
+            IF PATH.NC(0) = PATH.NC(1) THEN
               'COPY as new name
               STR.NC = TUIinput("COPY AS","New name for '"+MID$(SELECTED.NC,2)+"'",NCnewName(PATH.NC(1-ACTIVE.NC),MID$(SELECTED.NC,2)),FILECHARS.NC)
               IF STR.NC <> MID$(SELECTED.NC,2) AND STR.NC <> "" THEN
@@ -328,7 +334,7 @@ SUB NCkey(kk AS INTEGER)
               ENDIF                  
 
             ELSE
-              IF LEFT$(SELECTED.NC,1)="D" THEN
+              IF NCisDir(SELECTED.NC) THEN
                 'COPY DIR
                 IF TUIquestion("COPY DIR", "Copy '"+MID$(SELECTED.NC,2)+"' to '"+PATH.NC(1-ACTIVE.NC)+"'?") THEN
                   NCcopyDir(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2)+"/",PATH.NC(1-ACTIVE.NC)+MID$(SELECTED.NC,2)+"/")     
@@ -350,11 +356,11 @@ SUB NCkey(kk AS INTEGER)
           TUIwarning("MOVE FILE", "Move to/from server not supported yet")
         ELSE
           IF LEFT$(SELECTED.NC,3)<>"D.." THEN
-            IF PATH.NC(0)=PATH.NC(1) THEN 'RENAME
+            IF PATH.NC(0) = PATH.NC(1) THEN 'RENAME
              NCrenameItem
         
             ELSE 'MOVE
-              IF LEFT$(SELECTED.NC,1)="D" THEN
+              IF NCisDir(SELECTED.NC) THEN
                 'MOVE DIR
             
                 IF NCinsideTest(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2)+"/",PATH.NC(1-ACTIVE.NC)+MID$(SELECTED.NC,2)+"/") THEN
@@ -411,17 +417,17 @@ SUB NCkey(kk AS INTEGER)
 
     CASE 152  'F8, DEL 127 is sometimes stuck...
       IF EN_MENU.NC(7) THEN
-        IF NCisSerial(ACTIVE.NC) THEN
-          IF TUIquestion("DELETE ON SERVER", "Delete '" + MID$(SELECTED.NC,2) + "', really proceed?") THEN
-            NCserialOut("K" + PATH.NC(ACTIVE.NC) + MID$(SELECTED.NC,2))
-            NCchangeDir(ACTIVE.NC,PATH.NC(ACTIVE.NC))
-            IF NCinsideTest(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2)+"/",PATH.NC(1-ACTIVE.NC)+MID$(SELECTED.NC,2)+"/") THEN
-              NCchangeDir(1-ACTIVE.NC,PATH.NC(ACTIVE.NC))
+        IF LEFT$(SELECTED.NC,3)<>"D.." THEN
+          IF NCisSerial(ACTIVE.NC) THEN
+            IF TUIquestion("DELETE ON SERVER", "Delete '" + MID$(SELECTED.NC,2) + "', really proceed?") THEN
+              NCserialOut("K" + PATH.NC(ACTIVE.NC) + MID$(SELECTED.NC,2))
+              NCchangeDir(ACTIVE.NC,PATH.NC(ACTIVE.NC))
+              IF NCinsideTest(PATH.NC(ACTIVE.NC)+MID$(SELECTED.NC,2)+"/",PATH.NC(1-ACTIVE.NC)+MID$(SELECTED.NC,2)+"/") THEN
+                NCchangeDir(1-ACTIVE.NC,PATH.NC(ACTIVE.NC))
+              ENDIF
+              NCcursor(ACTIVE.NC,1)
             ENDIF
-            NCcursor(ACTIVE.NC,1)
-          ENDIF
-        ELSE
-          IF LEFT$(SELECTED.NC,3)<>"D.." THEN
+          ELSE
             NCdelete
           ENDIF
         ENDIF
@@ -429,8 +435,29 @@ SUB NCkey(kk AS INTEGER)
 
     CASE 153  'F9
       IF EN_MENU.NC(8) THEN
+        IF (NOT NCisSerial(0)) AND (NOT NCisSerial(1)) THEN
+          IF LEFT$(SELECTED.NC,3)<>"D.." THEN
+            IF NCisDir(SELECTED.NC) THEN
+              IF TUIquestion("MAKE MAR ARCHIVE","Archive '" + PATH.NC(ACTIVE.NC) + MID$(SELECTED.NC, 2) + "' to '" + MID$(SELECTED.NC, 2) + ".MAR' ?") THEN
+                IF NCexist(PATH.NC(ACTIVE.NC) + MID$(SELECTED.NC, 2) + ".MAR") THEN
+                  IF TUIquestion("MAKE MAR ARCHIVE", "Archive '" + MID$(SELECTED.NC, 2) + ".MAR' already exists, replace?") THEN
+                    NCmakeMAR
+                    NCchangeDir(0,PATH.NC(0))
+                    NCchangeDir(1,PATH.NC(1))
+                    NCcursor(ACTIVE.NC,1)
+                  ENDIF
+                ELSE
+                  NCmakeMAR
+                  NCchangeDir(0,PATH.NC(0))
+                  NCchangeDir(1,PATH.NC(1))
+                  NCcursor(ACTIVE.NC,1)
+                ENDIF
+              ENDIF
+            ENDIF
+          ENDIF
+        ENDIF
       ENDIF
-
+      
     CASE 154  'F10
       IF EN_MENU.NC(9) THEN
         IF TUIquestion("QUIT", "Are you redy to leave me alone?") THEN
@@ -447,7 +474,6 @@ SUB NCkey(kk AS INTEGER)
 
     CASE 156  'F12
       IF EN_MENU.NC(11) THEN
-        'TUIwarning("F12", PATH.NC(ACTIVE.NC))
         NCchangeDir(1-ACTIVE.NC,PATH.NC(ACTIVE.NC))        
         NCredrawPane(1-ACTIVE.NC)
       ENDIF
@@ -539,7 +565,8 @@ SUB NCconfig
         txt = txt + ",DIRs before FILEs"
         txt = txt + ",TEXT VIEWER fallback (BIN else)"
         txt = txt + ",HIGH COLOR mode"
-      
+        txt = txt + ",FAST SERIAL SERVER (691200bd)"
+     
   LOCAL INTEGER sel = NCconfigPack()
   LOCAL INTEGER oldSel = sel
   sel = TUIselect("CONFIGURATION",txt,sel)
@@ -553,7 +580,17 @@ SUB NCconfig
       MODE 1,8
     ENDIF
     FONT 8
-  ENDIF 
+  ENDIF
+  IF oldSel AND 64 THEN 
+    IF CFG_FastSerial.NC THEN
+      SERIAL_INIT.NC = "COM3:691200,1024"
+    ELSE
+      SERIAL_INIT.NC = "COM3:230400,1024"
+    ENDIF
+    IF SERIAL_ON.NC THEN CLOSE #1
+    SERIAL_ON.NC = 0
+    NULL_I.NC = NCserialOK()
+  ENDIF
   IF (oldSel AND 8) OR (oldSel AND 32) THEN 'changed MODE or items sorting
     NCchangeDir(0,PATH.NC(0))
     NCchangeDir(1,PATH.NC(1))
@@ -571,6 +608,7 @@ FUNCTION NCconfigPack() AS INTEGER
 
   NCconfigPack = CFG_ExtView.NC + 2*CFG_ExtAct.NC + 4*CFG_ESCup.NC
   NCconfigPack = NCconfigPack + 8*CFG_DirFil.NC + 16*CFG_TXTfb.NC + 32*CFG_HighColor.NC
+  NCconfigPack = NCconfigPack + 64*CFG_FastSerial.NC
 END FUNCTION
 
 SUB NCconfigSave(sel AS INTEGER)
@@ -594,6 +632,11 @@ SUB NCconfigLoad
     NCconfigUnpack(iCfg)
     CLOSE #3
   ENDIF
+  IF CFG_FastSerial.NC THEN
+    SERIAL_INIT.NC = "COM3:691200,1024"
+  ELSE
+    SERIAL_INIT.NC = "COM3:230400,1024"
+  ENDIF
 END SUB
 
 SUB NCconfigUnpack(sel AS INTEGER)
@@ -605,6 +648,7 @@ SUB NCconfigUnpack(sel AS INTEGER)
   CFG_DirFil.NC = (sel AND 8) > 0
   CFG_TXTfb.NC = (sel AND 16) > 0
   CFG_HighColor.NC = (sel AND 32) > 0
+  CFG_FastSerial.NC = (sel AND 64) > 0 
 END SUB
 
 SUB NCfindFirstChar(ch AS STRING)
@@ -695,7 +739,7 @@ SUB NCdelete(noWarning AS INTEGER)
       EXIT SUB
     ENDIF
   ENDIF
-  IF LEFT$(SELECTED.NC,1)="D" THEN
+  IF NCisDir(SELECTED.NC) THEN
     IF NCrmdir(CUR_PATH.NC+MID$(SELECTED.NC,2)) THEN 
       NCdeleteDir(CUR_PATH.NC+MID$(SELECTED.NC,2))
       IF INSTR(PATH.NC(0),CUR_PATH.NC+MID$(SELECTED.NC,2))>0 THEN
@@ -706,7 +750,7 @@ SUB NCdelete(noWarning AS INTEGER)
       ENDIF
     ENDIF
   ELSE
-    HLP.NC = NCkill(CUR_PATH.NC+MID$(SELECTED.NC,2))
+    NULL_I.NC = NCkill(CUR_PATH.NC+MID$(SELECTED.NC,2))
   ENDIF
   NCchangeDir(0,PATH.NC(0))
   NCchangeDir(1,PATH.NC(1))
@@ -754,13 +798,13 @@ SUB NChelp
       shrt(14) = ""
       shrt(15) = "F1        Shows this help"
       shrt(16) = "F2        Gets info, size for DIR, info for FILE"
-      shrt(17) = "F3        Quick (& dirty) file viewer"
+      shrt(17) = "F3        Quick (& dirty) text file viewer (ALT+F3 forces HEX)"
       shrt(18) = "F4        Quick editor (not done yet)"
       shrt(19) = "F5        Copies file or directory"
       shrt(20) = "F6        Moves or rename (if both panes are same)"
       shrt(21) = "F7        Creates new directory"
       shrt(22) = "F8        Deletes file or directory"
-      shrt(23) = "F9        RESERVED"
+      shrt(23) = "F9        MAR directory structure"
       shrt(24) = "F10       Quits NC"
       shrt(25) = "F11       NC Configuration"
       shrt(26) = "F12       Duplicates view to inactive pane"
@@ -872,7 +916,7 @@ SUB NCmoveFile(source AS STRING, dest AS STRING)
     IF NCcopy(source, dest) THEN 
       NCerror("COPY '" + NCgetName(source) + "' ERROR")
     ELSE
-      IF NCkill(source) THEN
+      IF NOT NCkill(source) THEN
         NCchangeDir(0,PATH.NC(0))
         NCchangeDir(1,PATH.NC(1))
         NCcursor(ACTIVE.NC,1)
@@ -1003,9 +1047,16 @@ FUNCTION NCname(f AS STRING) AS STRING
   'prepare name, make it shorter when needed
 
   LOCAL INTEGER l = LEN(f)
+  LOCAL STRING ex = NCgetExtension(f)
+
   IF l > 23 THEN
-    IF MID$(f, l-3,1)="." THEN
-      NCname = LEFT$(f, 18) + "~" + RIGHT$(f,4)
+    IF ex <> "" THEN
+      NCname = LEFT$(f, 18) + "~."
+      IF LEN(ex) > 3 THEN
+        NCname = NCname + "~" + RIGHT$(ex, 2)
+      ELSE
+        NCname = NCname + RIGHT$("   " + ex, 3)
+      ENDIF
     ELSE
       NCname = LEFT$(f, 22) + "~"
     ENDIF
@@ -1198,6 +1249,7 @@ SUB NCsort(side AS INTEGER)
     ITEM.NC(side,mi) = ITEM.NC(side,i-1)
     ITEM.NC(side,i-1) = ms 
   NEXT i
+  ENDIF
 END SUB
 
 SUB NCsetChar(s AS STRING, p AS INTEGER, c AS STRING)
@@ -1245,12 +1297,13 @@ SUB NCdeleteDir(start AS STRING)
       item = DIR$()
     LOOP
   LOOP
+
+  NCchdir("A:/")
   FOR ind = td TO 0 STEP -1
     IF LEFT$(toDo(ind),1)="K" THEN
       HLP.NC = NCkill(MID$(toDo(ind),2))
     ELSE
-      NCchdir MID$(toDo(ind),2)+"/.."
-      HLP.NC = NCrmdir(NCfilePart(MID$(toDo(ind),2)))
+      NULL_I.NC = NCrmdir(MID$(toDo(ind),2))
     ENDIF
   NEXT ind
   TUIwaitingOFF(ccc)
@@ -1702,7 +1755,7 @@ SUB NCinit
   NCsetMenu(5, "RenMov", 1)
   NCsetMenu(6, "MakDir", 1)
   NCsetMenu(7, "Delete", 1)
-  NCsetMenu(8, "RESERV", 0)
+  NCsetMenu(8, "MakMAR", 1)
   NCsetMenu(9, "QuitNC", 1)
   NCsetMenu(10,"Config", 1)
   NCsetMenu(11,"LP=RP", 1)
@@ -1722,7 +1775,7 @@ FUNCTION NCrmdir(filePath AS STRING) AS INTEGER
   'rmdir
 
   ON ERROR SKIP
-  RMDIR CUR_PATH.NC+MID$(SELECTED.NC,2)
+  RMDIR filePath
   NCrmdir = MM.ERRNO
 END FUNCTION
 
@@ -1895,7 +1948,7 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
   IF NCisSerial(1-ACTIVE.NC) THEN
     IF NCisSerial(ACTIVE.NC) THEN
       'server to server
-      IF TUIquestion("SERVER" + CHR$(227) + "SERVER COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
+      IF TUIquestion("SERVER" + RIGHT.NC + "SERVER COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
         NCserialOut("C" + source + "|" + dest)
         partData = NCreadUntilLF()
         IF partData = "DONE" THEN
@@ -1908,7 +1961,7 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
       ENDIF
     ELSE
       'local to server
-      IF TUIquestion("LOCAL" + CHR$(227) + "SERVER COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
+      IF TUIquestion("LOCAL" + RIGHT.NC + "SERVER COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
         NCserialOut("W" + NCgetName(source) + "|" + STR$(fileLen))
         partData = NCreadUntilLF()
         IF partData = "READY" THEN
@@ -1916,7 +1969,7 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
           partRem = fileLen MOD partLen
 
           IF fileLen > 5000 THEN
-            dialog = TUIwaitingON("LOCAL" + CHR$(227) + "SERVER COPY " + STR$(fileLen) + " bytes")
+            dialog = TUIwaitingON("LOCAL" + RIGHT.NC + "SERVER COPY " + STR$(fileLen) + " bytes")
           ENDIF
 
           OPEN source FOR INPUT AS #2
@@ -1959,7 +2012,7 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
     ENDIF
   ELSE
     'server to local
-    IF TUIquestion("SERVER" + CHR$(227) + "LOCAL COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
+    IF TUIquestion("SERVER" + RIGHT.NC + "LOCAL COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
       fileLen = VAL(FIELD$(COMPLETE.NC, 2, "|"))
       NCserialOut("R" + source + "|" + STR$(partLen))
       partData = NCreadUntilLF()
@@ -1967,7 +2020,7 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
         partNum = fileLen \ partLen
         partRem = fileLen MOD partLen
         IF fileLen > 5000 THEN
-          dialog = TUIwaitingON("SERVER" + CHR$(227) + "LOCAL " + STR$(fileLen) + " bytes")
+          dialog = TUIwaitingON("SERVER" + RIGHT.NC + "LOCAL " + STR$(fileLen) + " bytes")
         ENDIF
         NCserialOut("START")         
 
@@ -2012,4 +2065,85 @@ SUB NCserialOut(s AS STRING)
     ?#1,s + LF.NC;
   ENDIF
 END SUB
+
+FUNCTION NCisDir(s AS STRING) AS INTEGER
+  NCisDir = LEFT$(s, 1) = "D"
+END FUNCTION
+
+SUB NCmakeMAR
+
+  CONST maxLen = 128
+  LOCAL INTEGER ind = 0, td=0, size, filePos
+  LOCAL STRING item, path, partData
+  LOCAL STRING pth(MAX_ITEMS.NC)
+  LOCAL STRING toDo(MAX_ITEMS.NC)
+  LOCAL STRING dest = PATH.NC(1-ACTIVE.NC) + MID$(SELECTED.NC, 2) + ".MAR"
+  
+  LOCAL STRING ccc = TUIwaitingON("MAKE MAR ARCHIVE") 
+  pth(ind) = PATH.NC(ACTIVE.NC) + MID$(SELECTED.NC, 2)
+  toDo(td) = pth(ind)
+  DO WHILE ind >= 0
+    NCchdir pth(ind)
+    path = pth(ind)
+    ind = ind - 1
+    item = DIR$("", ALL)
+    DO WHILE item <> ""
+      IF LEFT$(item, 1) <> "." OR HIDDEN.NC THEN
+        size = MM.INFO(FILESIZE item)
+        IF size<0 THEN
+          'directory
+          ind = ind + 1
+          pth(ind) = path + "/" + item                
+          td = td + 1
+          toDo(td) = path + "/" + item + "/"
+ 
+        ELSE
+          'file
+          td = td + 1
+          toDo(td) = path + "/" + item
+        ENDIF
+      ENDIF
+      item = DIR$()
+    LOOP
+  LOOP
+
+  TUIwaitingProgress(ccc, 10)
+
+  SORT toDo(),,2,0,td+1 
+  toDo(0) = toDo(0) + "/"
+  path = toDo(0)
+  OPEN dest FOR OUTPUT AS #2
+  FOR ind = 0 TO td
+    TUIwaitingProgress(ccc, 10 + ind/td*90)
+    item = toDo(ind)
+    IF RIGHT$(item, 1) = "/" THEN
+      DO WHILE INSTR(item, path) = 0
+        ?#2,"ENDDIR: " + NCgetName(LEFT$(path, LEN(path)-1))
+        path = NCparent(path)  
+      LOOP
+      ?#2,"DIR: " + NCgetName(LEFT$(item, LEN(item)-1)) '" ("item")"
+      path = item
+    ELSE
+      DO WHILE INSTR(item, path) = 0
+        ?#2,"ENDDIR: " + NCgetName(LEFT$(path, LEN(path)-1))
+        path = NCparent(path)  
+      LOOP
+      ?#2,"FILE: " + NCgetName(item) '" ("item")"
+      filePos = 0
+      OPEN item FOR INPUT AS #3
+      ?#2,LOF(#3)
+      DO WHILE NOT EOF(#3)
+        size = MIN(LOF(#3) - filePos, maxLen)
+        filePos = filePos + size
+        partData = INPUT$(size, #3)
+        ?#2, partData;
+      LOOP
+      CLOSE #3
+    ENDIF
+  NEXT ind
+  ?#2,"ENDDIR " + NCgetName(LEFT$(toDo(0), LEN(toDo(0))-1))
+  CLOSE #2
+  TUIwaitingOFF(ccc)
+END SUB
+
 

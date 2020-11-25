@@ -66,7 +66,7 @@ SUB TUIwaitingProgress(coord AS STRING, perc AS INTEGER)
   LOCAL INTEGER h = VAL(FIELD$(coord,4,","))
   
   BOX dx + w \ 2 - 50, dy + 18, 100, 4, 1, RGB(BLACK)
-  BOX dx + w \ 2 - 50, dy + 18, perc, 4, 0, RGB(BLACK), RGB(BLACK)
+  BOX dx + w \ 2 - 50, dy + 18, MAX(MIN(perc, 100), 0), 4, 0, RGB(BLACK), RGB(BLACK)
 END SUB
 
 SUB TUIwaitingOFF(coord AS STRING)
