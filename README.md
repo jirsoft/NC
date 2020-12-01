@@ -1,7 +1,15 @@
 # NC
  Napoleon Ccommander
 
-Simple parody on Norton (Volkov...) commanders for Colour Maximite 2
+Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2
+
+#### v0.72
+	bug fixes
+	main menu shows ALT version
+	MOVES now under ALT+F5
+	BASIC Helpers under ALT+F4, pretty formater (not finished yet), DEBUG helper
+	simple archiver under ALT+F9 (RLE and HUFFMAN codec)
+	some other small changes
 
 #### v0.61
 	bug fixes
