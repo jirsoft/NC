@@ -2,34 +2,34 @@
 
   This application is a simple dual PANE file commander inspired by Norton (Volkov,...) commanders.
  It has just basic functionality but is still (hopefully) useful.
-
  
  1. PANES
 
   The app is controlled by two panes, left and right and either pane can be switched to the active
  state with the TAB key. The active pane has a "cursor" and a "header"; both are indicated by an
- inverse line of text. Source for any pane can be chosen with ALT+F1/F2 keys, it could be either SD
- card or SERVER = Python script serving files through standard USB A-B cable for CMM2 power supply.
- (For this functionality have to be set OPTION CONSOLE SCREEN + OPTION CONSOLE SAVE)
+ inverse line of text. The source of files/folders for either pane is chosen with the ALT+F1/F2
+ keys and can be either the SD card or a SERVER. The SERVER option uses Python script to serve
+ files from a laptop or PC via the standard USB A-B cable which also supplies the CMM2's power.
+ (This SERVER functionality requires OPTION CONSOLE SCREEN and OPTION CONSOLE SAVE to be set.)
 
- The cursor on the  active pane is moved UP or DOWN using the arrow keys, and the HOME/END keys
+ The cursor on the  active pane is moved UP/DOWN using the arrow keys, and the HOME/END keys
  select the first and last lines. The A-Z keys select the first file beginning with that character
  if one exists.
 
- The cursor selects the ACTIVE ITEM. A RED cursor indicates a HIDDEN file which begins with '.'
- Hidden files and folders can be toggled between SHOWN/HIDDEN with uppercase 'H' and status is
- indicated on the bottom left.
+ The cursor also selects the ACTIVE ITEM. A RED cursor indicates a HIDDEN file which begins with
+ the period character '.'  Hidden files and folders can be toggled between SHOWN/HIDDEN using
+ upper-case 'H' and status is indicated on the bottom left of the screen
 
- Normally pane items are shown SORTED but this can be switched off using uppercase 'U' with status
- indicated on the bottom left. Display of DIRs before FILEs, or vice versa, can be set in the
- CONFIGURATION file.
-
+ Normally pane items are shown SORTED but this can be switched off using upper-case 'U' with
+ status again indicated on the bottom left. Display of DIRs before FILEs, or vice versa, can be
+ set in the CONFIGURATION file.
  
  2. ACTIVE ITEM
 
-  ACTIONS can be performed on ACTIVE ITEMs. Some of them depend on the differences between panes
- but most are invoked by function keys. Some just use "normal" keys (see Shortcuts).
-
+  The selected ACTIVE ITEM can have ACTIONS performed on it. Some actions depend on the differences
+  between  panes, but most are invoked by function keys. Some use "normal" keys (see Shortcuts).
+  
+ 
  
  
  
@@ -40,15 +40,16 @@
   COPY   Copies files or folders to a new directory. When both panes contain the same directory,  
          the copied item must be named differently. App "AI" can propose a new name for you.
 
-  MOVE   Same as COPY, but source item is deleted and the folder move temporarily disabled.
+  MOVE   Same as COPY, but source item is deleted.
 
-  DELETE Deletes file or folder; the folder doesn't have to be empty. VERY DANGEROUS ACTION!!!
+  DELETE Deletes the file or folder; the folder doesn't have to be empty. VERY DANGEROUS ACTION!!!
 
-  L=R    Duplicates the active pane to the inactive pane.
+  LP=RP  Duplicates the active pane to the inactive pane.
 
  For some actions only the source file or folder is required.
    
-  GET INFO  For folders this calculates size and number of items - for files just returns size.
+  GET INFO   For folders this calculates size and number of items - for files tries to display some
+             informations.
  
   VIEWER     Shows file as text or HEX using ALT+F3. Currently only works for BMP files but in
              future (using SUB CALL) external viewers could be called based on the file extension.
@@ -57,35 +58,33 @@
   EDITOR     Extension of the VIEWER, not done (yet?).
 
   MAKE DIR   Create new folder in active directory.
-
-
-  SCREENSHOT Function (PRINT SCREEN) works strangely because ofthe IMAGE SAVE limitation.
-             After the keypress the shot is stored to memory, then later saved to disk.
-             Pressing LEFT ALT+PRINT SCREEN can "shoot" just an open dialog window.
-
- 
- 
- 
+  
+  MAKE MAR   Create .MAR archive from directory tree, unarchive with ENTER
+  
+  COMPRESS   Compress file into .ARC file (RLE or HUFFMAN compression), decompress with ENTER
+  
+  SCREENSHOT Function (PRINT SCREEN) works strangely because of the IMAGE SAVE limitation.
+             After the key-press the 'shot' is stored to memory, then later saved to disk.
+             Pressing LEFT ALT+PRINT SCREEN can 'shoot' just an open dialog window.
  
  
  Some settings can be changed with F11 (CONFIGURATION). They are stored in the CFG file and loaded
  on program start. Try them out:
  	
- 	External viewers enabled            F3 calls EXTviewXXX for externsion XXX (VIEWER.INC)
- 	External actions enabled            ENTER calls EXTactionXXX for externsion XXX (ACTION.INC)
- 	ESC to parent dir                   ESC works same way as ENTER on .. [ GO UP ]
- 	DIRs before FILEs                   MS WINDOWS's way to look on items list
- 	TEXT VIEWER fallback (BIN else)     If selected, F3 for unknown extension starts TXT viewer
- 	HIGH COLOR mode                     NC runs in more colors of MODE 1,16 (standard 1,8)
- 	FAST SERIAL SERVER            	    Communication with speed 691200 instead of 230400
- 	
-  
+ 	External viewers enabled            F3 calls EXTviewXXX for extension XXX (VIEWER.INC)
+ 	External actions enabled            ENTER calls EXTactionXXX for extension XXX (ACTION.INC)
+ 	ESC to parent directory             ESC works the same as ENTER on '..' i.e. GO UP a level.
+ 	DIRs before FILEs                   View of list as used by MS WINDOWS.
+ 	TEXT VIEWER fallback (BIN else)     If selected, F3 for unknown extension starts TXT viewer.
+ 	HIGH COLOR mode                     NC runs in extended colours of MODE 1,16 (standard is 1,8).
+ 	FAST SERIAL SERVER            	    Communication at 691200 baud instead of 230400.
+
  F10 will quit the App.
 
                                                                                 Enjoy it!
                                                                                 JirSoft@JirSoft.eu 
 
  
- Credits:   Geoff Graham and Pether Mather (CMM2, FW, MMBasic...), epsilon (MAR file format),
+ Credits:   Geoff Graham and Peter Mather (CMM2, FW, MMBasic...), epsilon (MAR file format),
             paceman (MANUAL.TXT)
   
