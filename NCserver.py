@@ -1,6 +1,7 @@
 #Napoleon Server
 #Simple server for CMM2  Napoleon Commander
 #JirSoft, 2020
+#v0.02
 
 from datetime import datetime
 from pathlib import Path
@@ -77,7 +78,8 @@ while True:
 					buffer = newFile.read()
 					newFile.close
 					bufPos = 0
-					ser.write('READY\n'.encode('ASCII'))
+					ret = 'READY|' + str(fileLen) + '\n'
+					ser.write(ret.encode('ASCII'))
 
 					while ser.in_waiting < 6:
 						time.sleep(0.1)
@@ -97,13 +99,10 @@ while True:
 							else:
 								print('ERROR ')
 						copyTime = time.perf_counter() - copyTime
-						#ser.write('DONE\n'.encode('ASCII'))
-						
+
 						if ser.read_until().decode('ASCII')[:-1] == 'DONE':
 							print('DONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(fileLen/copyTime/1024,1)) + ' kB/s)')
-						
-					
-			
+
 			#server -> server
 			elif ch[0] == 'C':
 				src = BASEDIR + ch.split('|')[0][4:]
@@ -116,7 +115,7 @@ while True:
 					shutil.copy(src, dest)
 				ser.write('DONE\n'.encode('ASCII'))
 			
-			#traverse directory
+			#list directory
 			elif ch[0] == 'D':
 				out('DIRECTORY ' + ch[1:])
 				CURDIR = ch[4:]
@@ -140,7 +139,8 @@ while True:
 					ret = 'D..|[ GO UP ]|'
 					out(ret)
 					ret += '\n'
-					ser.write(ret.encode('ASCII'))
+					if ser.read_until().decode('ASCII')[:-1] == 'NEXT':
+						ser.write(ret.encode('ASCII'))
 				
 				for item in dir.iterdir():
 					info = item.stat()
@@ -153,8 +153,35 @@ while True:
 						ret = 'D'+item.name + '|DIRECTORY|' + mtime
 					out(ret)
 					ret += '\n'
-					ser.write(ret.encode('ASCII'))
+					if ser.read_until().decode('ASCII')[:-1] == 'NEXT':
+						ser.write(ret.encode('ASCII'))
 		
+			#traverse directory
+			elif ch[0] == 'T':
+				out('TRAVERSE ' + ch[1:])
+				CURDIR = ch[4:]
+				if CURDIR != '':
+					if CURDIR[-1] != '/':
+						CURDIR += '/'
+				dir = Path(BASEDIR + CURDIR)
+				dirLen = len(BASEDIR)
+				trav = []
+				for dirpath, dirs, files in os.walk(dir):
+					trav.append('D' + dirpath[dirLen:])
+					for f in files:
+						trav.append ('F' + dirpath[dirLen:] + '/' + f + '|' + str(os.stat(dirpath + '/' + f).st_size))
+				
+				ret = 'T' + str(len(trav)) + '|' + 'S:/' + CURDIR
+				out(ret)
+				ret += '\n'
+				ser.write(ret.encode('ASCII'))
+				for r in trav:
+					ret = r
+					out(ret)
+					ret += '\n'
+					if ser.read_until().decode('ASCII')[:-1] == 'NEXT':
+						ser.write(ret.encode('ASCII'))
+										
 			#server MKDIR
 			elif ch[0] == 'M':
 				dirName = BASEDIR + ch[4:]
@@ -166,6 +193,13 @@ while True:
 					ser.write('ERRORDirecory exists\n'.encode('ASCII'))
 					print('Error: ' + dirName + ' exists')
 			
+			#server RENAME
+			elif ch[0] == 'N':
+				srcName = BASEDIR + ch.split('|')[0][4:]
+				destName = BASEDIR + ch.split('|')[1][3:]
+				out('RENAME item ' + srcName + ' to ' + destName)
+				os.rename(srcName, destName)
+				
 			#server KILL or RMDIR (include subdirs)
 			elif ch[0] == 'K':
 				itemName = BASEDIR + ch[4:]
