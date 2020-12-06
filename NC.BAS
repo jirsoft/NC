@@ -1,11 +1,11 @@
-#MMDEBUG ON '''
+'''#MMDEBUG ON
 
 OPTION EXPLICIT
 OPTION DEFAULT NONE
 OPTION BASE 0
 OPTION CRLF CR
 
-CONST VERSION = "0.80"
+CONST VERSION = "0.81"
 
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = NCgetPath(MM.INFO$(CURRENT))     'path to NC executable
@@ -674,8 +674,8 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "BMP"
       CLS
       LOAD BMP p+s
-      DO:LOOP WHILE INKEY$=""
       DO:LOOP WHILE INKEY$<>""
+      DO:LOOP WHILE INKEY$=""
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -684,8 +684,8 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "JPG"
       CLS
       LOAD JPG p+s
-      DO:LOOP WHILE INKEY$=""
       DO:LOOP WHILE INKEY$<>""
+      DO:LOOP WHILE INKEY$=""
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -694,8 +694,8 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "PNG"
       CLS
       LOAD PNG p+s
-      DO:LOOP WHILE INKEY$=""
       DO:LOOP WHILE INKEY$<>""
+      DO:LOOP WHILE INKEY$=""
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -704,8 +704,8 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "GIF"
       CLS
       LOAD GIF p+s
-      DO:LOOP WHILE INKEY$=""
       DO:LOOP WHILE INKEY$<>""
+      DO:LOOP WHILE INKEY$=""
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -759,8 +759,10 @@ SUB NCredrawPane(side AS INTEGER)
   BOX 400*side,0,400,566,0,,RGB(BLUE)
   BOX 400*side+1,0+6,400-3,568-15,2,RGB(WHITE),RGB(BLUE)
   IF side = ACTIVE.NC THEN
+    ACT_PATH.NC = PATH.NC(side)
     TEXT 400*side+200,0," "+short+" ","CT",8,,RGB(BLUE),RGB(WHITE)
   ELSE
+    NON_PATH.NC = PATH.NC(side)
     TEXT 400*side+200,0," "+short+" ","CT",8,,RGB(WHITE),RGB(BLUE)
   ENDIF
   TEXT 400*side+200,600-52,NCcounter(side),"CT",,,RGB(WHITE),RGB(BLUE)

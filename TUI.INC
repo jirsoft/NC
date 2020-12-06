@@ -1,4 +1,5 @@
 'Simple TUI, it's prepared for screenshoting
+CONST VERSION.TUI = "0.10"
 DIM INTEGER ON.TUI, X.TUI, Y.TUI, W.TUI, H.TUI 
 
 CONST CURSOR_SPEED.TUI = 300 'cursor blinking speed in ms
@@ -324,3 +325,93 @@ FUNCTION TUIselect(title AS STRING, txt AS STRING, s AS INTEGER) AS INTEGER
     TUIselect = s
   ENDIF
 END FUNCTION
+
+SUB TUIwaitForNoKey
+  DO:LOOP WHILE INKEY$<>""
+END SUB
+
+FUNCTION TUIgetItem(title AS STRING, txt() AS STRING) AS STRING
+  'Shows more lines of text (BLIT #1) and let the user select one
+
+  CONST maxItems = 5
+  LOCAL INTEGER w = 32 + 8 * LEN(title), h = 16, i
+  LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
+  LOCAL INTEGER m = BOUND(txt()), curs = 0, position = 0
+  LOCAL INTEGER pbLen = (1 + maxItems) ^ 2 / (1 + m) * 16, ww = 0
+  LOCAL INTEGER pbPos = pbLen / (1 + maxItems), running = 1, prev = -1, prevCurs = -1
+  LOCAL STRING k
+
+  TUIgetItem = ""
+
+  FOR i = 0 TO m
+    IF LEN(txt(i)) > 98 THEN txt(i) = LEFT$(txt(i),98)
+    ww = MAX(ww, LEN(txt(i)))
+  NEXT i
+  w = MAX(24+8*ww, w)
+  h = MIN(maxItems, m) * 16+70
+  LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
+
+  BLIT READ #1,dx,dy,w,h 
+  BOX dx,dy,w,h,0,b,b
+  BOX dx+3,dy+8,w-6,h-11,2,f,b
+  TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
+  TEXT dx+8,dy+h-24,"Cancel","LT",8,,b,f
+  TEXT dx+w-8,dy+h-24,"  OK  ","RT",8,,b,f
+  ON.TUI = 1: X.TUI = dx: Y.TUI = dy: W.TUI = w: H.TUI = h 'for screenshot
+
+  DO WHILE running
+    IF position <> prev OR curs <> prevCurs THEN
+      FOR i = 0 TO MIN(m, maxItems)
+        IF i+position = curs THEN
+          TEXT dx+8,dy+24+i*16,txt(position + i) + SPACE$(ww - LEN(txt(position + i))),"LT",8,,b,f
+          TUIgetItem = txt(position + i)
+        ELSE
+          TEXT dx+8,dy+24+i*16,txt(position + i) + SPACE$(ww - LEN(txt(position + i))),"LT",8,,f,b
+        ENDIF
+      NEXT i
+      IF m > maxItems THEN
+        BOX dx + w - 12, dy + 24, 4, (1 + maxItems) * 16, 1, RGB(BLACK), RGB(YELLOW)
+        BOX dx + w - 11, dy + 24 + position * pbPos, 2, pbLen, 0, RGB(BLACK), RGB(BLACK)
+      ENDIF
+      prev = position
+      prevCurs = curs
+    ENDIF
+    k = INKEY$
+    IF k <> "" THEN
+      SELECT CASE k
+      CASE CHR$(128) 'up
+        IF curs > position THEN
+          INC curs, -1
+        ELSE
+          IF position > 0 THEN
+            INC position, -1
+            INC curs, -1
+          ENDIF            
+        ENDIF
+
+      CASE CHR$(129) 'down
+        IF curs < maxItems+position THEN
+          INC curs, 1
+        ELSE
+          IF position+maxItems < m THEN
+            INC curs, 1
+            INC position, 1
+          ENDIF
+        ENDIF
+
+      CASE CHR$(27) 'ESC
+        TUIgetItem = ""
+        running = 0
+      
+      CASE CHR$(10) 'ENTER
+        running = 0
+
+      END SELECT
+    ENDIF 
+  LOOP
+  
+  ON.TUI = 0  
+  BLIT WRITE #1,dx,dy
+  BLIT CLOSE #1
+END FUNCTION
+
