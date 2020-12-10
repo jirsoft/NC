@@ -330,31 +330,34 @@ SUB TUIwaitForNoKey
   DO:LOOP WHILE INKEY$<>""
 END SUB
 
-FUNCTION TUIgetItem(title AS STRING, txt() AS STRING) AS STRING
+FUNCTION TUIgetItem(title AS STRING, subtitle AS STRING, txt() AS STRING) AS STRING
   'Shows more lines of text (BLIT #1) and let the user select one
 
-  CONST maxItems = 5
-  LOCAL INTEGER w = 32 + 8 * LEN(title), h = 16, i
+  LOCAL INTEGER w = 32 + 8 * LEN(title)
+  LOCAL INTEGER h = 16, i
   LOCAL INTEGER b = RGB(YELLOW), f = RGB(GRAY)
   LOCAL INTEGER m = BOUND(txt()), curs = 0, position = 0
+  LOCAL INTEGER maxItems = MIN(30, m)
   LOCAL INTEGER pbLen = (1 + maxItems) ^ 2 / (1 + m) * 16, ww = 0
   LOCAL INTEGER pbPos = pbLen / (1 + maxItems), running = 1, prev = -1, prevCurs = -1
   LOCAL STRING k
 
   TUIgetItem = ""
 
+  w = MAX(32 + 8 * LEN(subtitle), w)  
   FOR i = 0 TO m
     IF LEN(txt(i)) > 98 THEN txt(i) = LEFT$(txt(i),98)
     ww = MAX(ww, LEN(txt(i)))
   NEXT i
-  w = MAX(24+8*ww, w)
-  h = MIN(maxItems, m) * 16+70
+  w = MAX(24 + 8 * ww, w)
+  h = MIN(maxItems, m) * 16+86
   LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
 
   BLIT READ #1,dx,dy,w,h 
   BOX dx,dy,w,h,0,b,b
   BOX dx+3,dy+8,w-6,h-11,2,f,b
   TEXT dx+w\2,dy+1," " + title + " ","CT",8,,f,b
+  TEXT dx+w\2,dy+17," " + subtitle  + " ","CT",8,,f,b
   TEXT dx+8,dy+h-24,"Cancel","LT",8,,b,f
   TEXT dx+w-8,dy+h-24,"  OK  ","RT",8,,b,f
   ON.TUI = 1: X.TUI = dx: Y.TUI = dy: W.TUI = w: H.TUI = h 'for screenshot
@@ -363,10 +366,10 @@ FUNCTION TUIgetItem(title AS STRING, txt() AS STRING) AS STRING
     IF position <> prev OR curs <> prevCurs THEN
       FOR i = 0 TO MIN(m, maxItems)
         IF i+position = curs THEN
-          TEXT dx+8,dy+24+i*16,txt(position + i) + SPACE$(ww - LEN(txt(position + i))),"LT",8,,b,f
+          TEXT dx+8,dy+40+i*16,txt(position + i) + SPACE$(ww - LEN(txt(position + i))),"LT",8,,b,f
           TUIgetItem = txt(position + i)
         ELSE
-          TEXT dx+8,dy+24+i*16,txt(position + i) + SPACE$(ww - LEN(txt(position + i))),"LT",8,,f,b
+          TEXT dx+8,dy+40+i*16,txt(position + i) + SPACE$(ww - LEN(txt(position + i))),"LT",8,,f,b
         ENDIF
       NEXT i
       IF m > maxItems THEN
@@ -415,3 +418,78 @@ FUNCTION TUIgetItem(title AS STRING, txt() AS STRING) AS STRING
   BLIT CLOSE #1
 END FUNCTION
 
+FUNCTION TUIgetParent(s AS STRING) AS STRING
+  TUIgetParent = s
+  IF UCASE$(s) <> "A:/" THEN
+    IF RIGHT$(TUIgetParent, 1) = "/" THEN
+      TUIgetParent = LEFT$(TUIgetParent, LEN(TUIgetParent) - 1)
+    ENDIF
+    DO WHILE RIGHT$(TUIgetParent, 1) <> "/"
+      TUIgetParent = LEFT$(TUIgetParent, LEN(TUIgetParent) - 1)
+    LOOP      
+  ENDIF
+END FUNCTION
+
+FUNCTION TUIfileSelect(path AS STRING, ext AS STRING) AS STRING
+  LOCAL INTEGER fs = 1
+  DO WHILE fs
+    TUIfileSelect = TUIgetSelect(path, ext)
+    IF TUIfileSelect = "." THEN
+      path = "A:/"
+      CHDIR path
+    ELSEIF TUIfileSelect = ".." THEN
+      path = TUIgetParent(path)
+      CHDIR path
+    ELSEIF RIGHT$(TUIfileSelect, 6) = " <DIR>" THEN
+      path = path + LEFT$(TUIfileSelect, LEN(TUIfileSelect) - 6) + "/"
+      CHDIR path
+    ELSE
+      fs = 0
+    ENDIF
+  LOOP
+END FUNCTION
+
+FUNCTION TUIgetSelect(path AS STRING, ext AS STRING) AS STRING
+  LOCAL STRING f
+  LOCAL INTEGER cnt = 0
+
+  f = DIR$("", ALL)
+  DO WHILE f <> ""
+    IF UCASE$(RIGHT$(f, LEN(ext))) = UCASE$(ext) THEN  
+      INC cnt
+    ELSEIF MM.INFO(FILESIZE f) < 0 THEN
+      IF LEFT$(f, 1) <> "." THEN
+        INC cnt
+      ENDIF
+    ENDIF
+    f = DIR$()
+  LOOP
+  
+  IF path <> "A:/" THEN
+    INC cnt
+  ENDIF
+  LOCAL STRING fn(cnt)
+
+  cnt = 0 
+  fn(cnt) = "."
+  IF path <> "A:/" THEN
+    INC cnt
+    fn(cnt) = ".."
+  ENDIF
+
+  f = DIR$("", ALL)
+  DO WHILE f <> ""
+    IF UCASE$(RIGHT$(f, LEN(ext))) = UCASE$(ext) THEN  
+      INC cnt
+      fn(cnt) = f
+    ELSEIF MM.INFO(FILESIZE f) < 0 THEN
+      IF LEFT$(f, 1) <> "." THEN
+        INC cnt
+        fn(cnt) = f + " <DIR>"
+      ENDIF
+    ENDIF
+    f = DIR$()
+  LOOP
+  SORT fn(),,2
+  TUIgetSelect = TUIgetItem("SELECT " + ext + " FILE", path, fn())
+END FUNCTION
