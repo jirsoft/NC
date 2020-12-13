@@ -45,7 +45,7 @@
 'SUB TUIwaitForNoKey
   'waits for key or until no key pressed
 
-CONST VERSION.TUI = "0.30"
+CONST VERSION.TUI = "0.31"
 DIM INTEGER ON.TUI, X.TUI, Y.TUI, W.TUI, H.TUI 'for screenshot
 
 CONST CURSOR_SPEED.TUI = 300 'cursor blinking speed in ms
@@ -587,18 +587,25 @@ FUNCTION TUIinput(title AS STRING, txt AS STRING, def AS STRING, en AS STRING) A
     k = INKEY$
     
     SELECT CASE k
-      CASE CHR$(127)  'DEL, delete all
+      CASE CHR$(160)  'SHIFT DEL, delete all
         TUIinput = ""
         change = 1
         LINE cursorX, cursorY, cursorX + fow, cursorY,2,BC.TUI
         cursorX = dx + fow
          
-      CASE CHR$(8)    'BACKSPACE, delete last character
+      CASE CHR$(8)    'BACKSPACE, delete left character
         charPos = (cursorX - dx)\fow          
         IF TUIinput<>"" AND charPos > 1 THEN
           TUIinput = LEFT$(TUIinput, charPos - 2) + MID$(TUIinput, charPos)
           LINE cursorX, cursorY, cursorX + fow, cursorY,2,BC.TUI
           INC cursorX, -fow
+          change = 1
+        ENDIF
+
+      CASE CHR$(127)    'DEL, delete right character
+        charPos = (cursorX - dx)\fow          
+        IF charPos <= LEN(TUIinput) THEN
+          TUIinput = LEFT$(TUIinput, charPos - 1) + MID$(TUIinput, charPos + 1)
           change = 1
         ENDIF
 
