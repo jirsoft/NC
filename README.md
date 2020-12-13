@@ -3,6 +3,11 @@
 
 Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2
 
+#### v0.91
+	bug fixes
+	new TUI version
+	CTRL-C blocked
+	
 #### v0.72
 	bug fixes
 	main menu shows ALT version
