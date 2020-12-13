@@ -4,8 +4,10 @@ OPTION EXPLICIT
 OPTION DEFAULT NONE
 OPTION BASE 0
 OPTION CRLF CR
+OPTION BREAK 0
 
-CONST VERSION = "0.81"
+'Napoleon Commander
+CONST VERSION = "0.91"
 
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = NCgetPath(MM.INFO$(CURRENT))     'path to NC executable
@@ -134,7 +136,7 @@ DO
         NCdrawMenuPart(2)
         NCsetMenu(2, "Viewer", 1)
         NCdrawMenuPart(3)
-        NCsetMenu(3, "Editor", 0)
+        NCsetMenu(3, "EdiHEX", 1)
         NCdrawMenuPart(4)
         NCsetMenu(4, "Copy", 1)
         NCdrawMenuPart(5)
@@ -253,12 +255,21 @@ SUB NCgetInfo(filePath AS STRING)
       'archive view
       LOCAL STRING inf(4)
       LOCAL STRING header
+      LOCAL INTEGER skp
+
       OPEN ACT_PATH.NC + SEL_NAME.NC FOR INPUT AS #3
       LINE INPUT #3,header
       IF LEFT$(header, 3) = "HUF" THEN
         LOCAL INTEGER tLen = ASC(INPUT$(1, #3))
         LOCAL INTEGER tMin = ASC(MID$(INPUT$(2, #3), 2, 1))
-        IF tLen > 2 THEN lin = INPUT$(2 * (tLen - 2), #3)
+        IF tLen > 2 THEN 
+          skp = 2 * (tLen - 2)
+          DO WHILE skp > 255
+            skp = skp - 255
+            lin = INPUT$(255, #3)
+          LOOP
+          lin = INPUT$(skp, #3)      
+        ENDIF
         LOCAL INTEGER tMax = ASC(MID$(INPUT$(2, #3), 2, 1))
 
       ENDIF
@@ -2219,7 +2230,7 @@ SUB NCfKeys(fkey AS INTEGER)
           ENDIF
         ENDIF
       ELSE
-        TUIwarning("HEX Editor","Not exists yet")
+        NCeditHEX(ACT_PATH.NC + SEL_NAME.NC)
       ENDIF
 
     CASE 149  'F5
@@ -2370,8 +2381,9 @@ SUB NCfKeys(fkey AS INTEGER)
       
     CASE 154  'F10
       IF ALT.NC THEN
-        IF TUIquestion("QUIT", "Are you redy to leave me alone?") THEN
+        IF TUIquestion("QUIT", "Are you ready to leave me alone?") THEN
           NCchdir ACT_PATH.NC
+          OPTION BREAK 3
           CLS
           END
         ENDIF
@@ -3084,5 +3096,86 @@ FUNCTION NCserverDirInfo(filePath AS STRING) AS INTEGER
   ENDIF
   NCserverDirInfo = (bytes << 16) + items  
 END FUNCTION
+
+SUB NCeditHEX(filePath AS STRING)
+  'simple hex editor
+
+  LOCAL INTEGER si = MM.INFO(FILESIZE filePath)
+  LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, change = 0, b, po = 0, i
+  LOCAL STRING li,k
+  LOCAL INTEGER cx = 0, cy = 0
+  CLS
+  BOX 0,16,800,600-32,0,,RGB(CYAN)
+  LINE 0,7,800,7,2,RGB(WHITE)
+  LINE 0,600-8,800,600-8,2,RGB(WHITE)
+  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(BLACK)
+
+  COPY filePath TO filePath + ".TMP"
+
+  DO 
+    OPEN filePath + ".TMP" FOR RANDOM AS #3
+    SEEK #3, po + 1
+    change = 0
+    cnt = 0 
+    row = 0
+  
+    TEXT 400,600-16," Position " + HEX$(po,8) + " of " + HEX$(si,8) + " ","CT",8,,RGB(WHITE),RGB(BLACK)
+
+    PAGE WRITE 1
+    BOX 0,16,800,600-32,0,,RGB(CYAN)
+    DO WHILE cnt<16*35 AND NOT EOF(#3)
+      li = INPUT$(16, #3)
+    
+      TEXT 8,firstRow + row, LEFT$(HEX$(po+cnt,8),4), "LT",8,,RGB(BLUE), RGB(CYAN)
+      TEXT 44,firstRow + row, RIGHT$(HEX$(po+cnt,8),4), "LT",8,,RGB(BLUE), RGB(CYAN)
+      FOR i = 0 TO MIN(LEN(li)-1,15)
+        b = ASC(MID$(li,i+1,1))
+        TEXT 112+i*32,firstRow + row, HEX$(b,2),"LT",8,,RGB(BLACK), RGB(CYAN)
+        IF b>=32 AND b<=127 THEN
+          TEXT 640+i*8,firstRow + row, CHR$(b),"LT",8,,RGB(BLACK), RGB(CYAN)
+        ELSE
+          TEXT 640+i*8,firstRow + row, ".","LT",8,,RGB(BLACK), RGB(CYAN)
+        ENDIF
+      NEXT i          
+      row = row + 16
+      cnt = cnt + 16
+    LOOP
+    CLOSE #3
+    PAGE WRITE 0
+    BLIT 0,16,0,16,800,600-32,1
+    
+    DO WHILE change = 0 AND k<>ESC.NC
+      DO: k = INKEY$: LOOP WHILE k=""
+      SELECT CASE k
+        CASE CHR$(136)
+          'Page UP
+          IF po >= 16*35 THEN 
+            po = MAX(po - 16*35,0)
+            change = 1
+          ENDIF
+
+        CASE CHR$(137)
+          'Page DOWN
+          IF (po+16*35) <= si  THEN 
+            po = po + 16*35
+            change = 1
+          ENDIF
+
+        CASE CHR$(128)
+          'UP
+
+        CASE CHR$(129)
+          'DOWN
+
+      END SELECT
+    LOOP
+  LOOP WHILE k<>ESC.NC
+  NCredrawPane(0)
+  NCredrawPane(1)  
+  NCcursor(ACTIVE.NC,1)
+  NCdrawMenu
+END SUB
+
 
 
