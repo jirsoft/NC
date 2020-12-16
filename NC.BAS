@@ -7,15 +7,19 @@ OPTION CRLF CR
 OPTION BREAK 0
 
 'Napoleon Commander
-CONST VERSION = "0.91"
+CONST VERSION = "0.92"
 
 DIM INTEGER INIT.NC = 0
-DIM STRING NC_PATH.NC = NCgetPath(MM.INFO$(CURRENT))     'path to NC executable
+DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
 
 HLPinitDebug
 NCchdir NC_PATH.NC
 
-#INCLUDE "TUI.INC"
+'download https://github.com/jirsoft/TUI/TUI.INC,
+'put it to the same directory as SimplEd and include it
+'#INCLUDE "TUI.INC"
+#INCLUDE "../LIB/TUI.INC"
+
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
@@ -682,11 +686,15 @@ SUB NCaction(p AS STRING, s AS STRING)
   
   TUIwaitForNoKey
   SELECT CASE ex
+    CASE "BAS"
+      extAction = "RUN " + CHR$(34) + p + s + CHR$(34)
+      OPTION BREAK 3
+      EXECUTE extAction
+
     CASE "BMP"
       CLS
       LOAD BMP p+s
-      DO:LOOP WHILE INKEY$<>""
-      DO:LOOP WHILE INKEY$=""
+      TUIwaitForKey
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -695,8 +703,7 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "JPG"
       CLS
       LOAD JPG p+s
-      DO:LOOP WHILE INKEY$<>""
-      DO:LOOP WHILE INKEY$=""
+      TUIwaitForKey
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -705,8 +712,7 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "PNG"
       CLS
       LOAD PNG p+s
-      DO:LOOP WHILE INKEY$<>""
-      DO:LOOP WHILE INKEY$=""
+      TUIwaitForKey
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -715,8 +721,7 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "GIF"
       CLS
       LOAD GIF p+s
-      DO:LOOP WHILE INKEY$<>""
-      DO:LOOP WHILE INKEY$=""
+      TUIwaitForKey
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -3176,6 +3181,4 @@ SUB NCeditHEX(filePath AS STRING)
   NCcursor(ACTIVE.NC,1)
   NCdrawMenu
 END SUB
-
-
 
