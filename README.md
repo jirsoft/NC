@@ -6,7 +6,7 @@ Simple file commander based on ancient Norton (Volkov...) commanders for DOS, no
 #### v0.92
 	bug fixes
 	can run basic program with ENTER
-	removed TUI.INC, can be downloaded from https://github.com/jirsoft/TUI/blob/master/TUI.INC
+	removed TUI.INC, can be downloaded from [GitHub here](https://github.com/jirsoft/TUI/blob/master/TUI.INC)
 	
 #### v0.91
 	bug fixes
