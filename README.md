@@ -1,8 +1,8 @@
 # NC
  Napoleon Commander
 
-Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2
-You need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC)
+Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2,
+you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC)
 
 #### v0.92
 	bug fixes
