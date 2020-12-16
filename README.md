@@ -3,6 +3,11 @@
 
 Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2
 
+#### v0.92
+	bug fixes
+	can run basic program with ENTER
+	removed TUI.INC, can be downloaded from https://github.com/jirsoft/TUI/blob/master/TUI.INC
+	
 #### v0.91
 	bug fixes
 	new TUI version
