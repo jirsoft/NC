@@ -7,7 +7,7 @@ OPTION CRLF CR
 OPTION BREAK 0
 
 'Napoleon Commander
-CONST VERSION = "0.92"
+CONST VERSION = "0.93"
 
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
@@ -15,11 +15,7 @@ DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
 HLPinitDebug
 NCchdir NC_PATH.NC
 
-'download https://github.com/jirsoft/TUI/TUI.INC,
-'put it to the same directory as SimplEd and include it
-'#INCLUDE "TUI.INC"
 #INCLUDE "../LIB/TUI.INC"
-
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
@@ -3015,9 +3011,9 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
 
   lineSerial = NCreadUntilLF()
   IF LEFT$(lineSerial, 1) = "T" THEN
-    cnt = VAL(MID$(lineSerial,2)) - 1
+    cnt = VAL(MID$(lineSerial,2))
     LOCAL STRING tree(cnt)
-    FOR i = 0 TO cnt
+    FOR i = 1 TO cnt
       NCserialOut("NEXT")         
       lineSerial = NCreadUntilLF()
       IF lineSerial <> "" THEN
@@ -3025,7 +3021,7 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
       ENDIF
     NEXT i
   ENDIF
-  FOR i = 0 TO cnt
+  FOR i = 1 TO cnt
     lineSerial = FIELD$(tree(i), 1, "|")
     dst = dest + MID$(lineSerial, strip)
     IF LEFT$(tree(i), 1) = "D" THEN

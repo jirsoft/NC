@@ -1,7 +1,7 @@
 #Napoleon Server
 #Simple server for CMM2  Napoleon Commander
 #JirSoft, 2020
-#v0.02
+#v0.03
 
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +12,9 @@ import time
 
 #modify to your port
 ser = serial.Serial(
-	port='/dev/tty.usbmodem14101',
+	#port='/dev/tty.usbserial-AD0JHH4Z', #MacOS, CMM2 deluxe
+	#port='COM4', #WINDOWS
+	port='/dev/tty.usbmodem14101', #MacOS, CMM2 standard
 	#tested on my computer, needs to be the same speed as on CMM2 in SERIAL_INIT.NC
 	baudrate = 691200,
 	parity=serial.PARITY_NONE,
@@ -23,12 +25,16 @@ ser = serial.Serial(
 	
 #modify to your path to server root, this server has no other access
 BASEDIR = "/Users/jirsoft/Documents/Maximite/NCserver/"
+mapping = {}
 
 def convert_date(timestamp):
     d = datetime.utcfromtimestamp(timestamp)
     formated_date = d.strftime('%y-%m-%d %H:%M')
     return formated_date
 
+def uni2ascii(s):
+	return(s.encode("ascii", "ignore").decode())
+	
 def out(s):
 	print(s)
 	
@@ -118,19 +124,20 @@ while True:
 			#list directory
 			elif ch[0] == 'D':
 				out('DIRECTORY ' + ch[1:])
-				CURDIR = ch[4:]
+				CURDIR = mapping.get(ch[4:], ch[4:])
 				if CURDIR != '':
 					if CURDIR[-1] != '/':
 						CURDIR += '/'
 			
 				dir = Path(BASEDIR + CURDIR)
+				mapping = {}
 				cnt = 0
 				for item in dir.iterdir():
 					cnt += 1
 				if len(CURDIR) > 0:
 					cnt += 1
 			
-				ret = 'D' + str(cnt) + '|' + 'S:/' + CURDIR
+				ret = 'D' + str(cnt) + '|' + 'S:/' + uni2ascii(CURDIR)
 				out(ret)
 				ret += '\n'
 				ser.write(ret.encode('ASCII'))
@@ -143,14 +150,18 @@ while True:
 						ser.write(ret.encode('ASCII'))
 				
 				for item in dir.iterdir():
+					okName = uni2ascii(item.name)
+					if item.name != okName:
+						mapping[okName] = item.name
+						out("Map '" + item.name + "' to '" + okName + "'")
 					info = item.stat()
 					mtime = convert_date(info.st_mtime)
 					if item.is_file():
 						fsize = str(info.st_size)
-						ret = 'F'+item.name + '|' + fsize + "|" + mtime
+						ret = 'F' + okName + '|' + fsize + "|" + mtime
 
-					else:
-						ret = 'D'+item.name + '|DIRECTORY|' + mtime
+					else:						
+						ret = 'D' + okName + '|DIRECTORY|' + mtime
 					out(ret)
 					ret += '\n'
 					if ser.read_until().decode('ASCII')[:-1] == 'NEXT':
@@ -159,7 +170,8 @@ while True:
 			#traverse directory
 			elif ch[0] == 'T':
 				out('TRAVERSE ' + ch[1:])
-				CURDIR = ch[4:]
+				#CURDIR = ch[4:]
+				CURDIR = mapping.get(ch[4:], ch[4:])
 				if CURDIR != '':
 					if CURDIR[-1] != '/':
 						CURDIR += '/'
@@ -171,13 +183,14 @@ while True:
 					for f in files:
 						trav.append ('F' + dirpath[dirLen:] + '/' + f + '|' + str(os.stat(dirpath + '/' + f).st_size))
 				
-				ret = 'T' + str(len(trav)) + '|' + 'S:/' + CURDIR
+				ret = 'T' + str(len(trav)) + '|' + 'S:/' + uni2ascii(CURDIR)
 				out(ret)
 				ret += '\n'
 				ser.write(ret.encode('ASCII'))
 				for r in trav:
 					ret = r
 					out(ret)
+					ret = uni2ascii(ret)
 					ret += '\n'
 					if ser.read_until().decode('ASCII')[:-1] == 'NEXT':
 						ser.write(ret.encode('ASCII'))
