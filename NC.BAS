@@ -7,7 +7,7 @@ OPTION CRLF CR
 OPTION BREAK 0
 
 'Napoleon Commander
-CONST VERSION = "0.93"
+CONST VERSION = "0.95"
 
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
@@ -30,7 +30,8 @@ CONST LF.NC = CHR$(10)
 CONST INFO.NC = "FILEINFO.TXT"
 CONST SERIAL_TIMEOUT.NC = 300
 
-
+CONST BUFFER_LEN.NC = 100000 
+DIM INTEGER BUFFER.NC(BUFFER_LEN.NC \ 8)
 DIM STRING SERIAL_INIT.NC = "COM3:230400,1024"
 DIM STRING SERIAL_IN.NC = ""
 DIM STRING SERIAL_PATH.NC = ""
@@ -690,7 +691,9 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "BMP"
       CLS
       LOAD BMP p+s
+      TUIwaitForNoKey
       TUIwaitForKey
+      TUIwaitForNoKey
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -699,7 +702,9 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "JPG"
       CLS
       LOAD JPG p+s
+      TUIwaitForNoKey
       TUIwaitForKey
+      TUIwaitForNoKey
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -708,7 +713,9 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "PNG"
       CLS
       LOAD PNG p+s
+      TUIwaitForNoKey
       TUIwaitForKey
+      TUIwaitForNoKey
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -717,7 +724,9 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "GIF"
       CLS
       LOAD GIF p+s
+      TUIwaitForNoKey
       TUIwaitForKey
+      TUIwaitForNoKey
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -1374,7 +1383,9 @@ SUB NCviewBMP(filePath AS STRING)
 
 
   END SELECT
-  DO:LOOP WHILE INKEY$=""  
+  TUIwaitForNoKey
+  TUIwaitForKey
+  TUIwaitForNoKey
   NCredrawPane(0)
   NCredrawPane(1)  
   NCcursor(ACTIVE.NC,1)
@@ -1587,9 +1598,8 @@ END FUNCTION
 SUB NCserverCopy(source AS STRING, dest AS STRING)
   'copy to/from/on server
 
-  CONST partLen = 250
-  LOCAL STRING partData, dialog
-  LOCAL INTEGER timeOut, partNum, partRem, fileLen = MM.INFO(FILESIZE source), i
+  LOCAL STRING partData
+  LOCAL INTEGER partNum, partRem
 
   IF NCisSerial(1-ACTIVE.NC) THEN
     IF NCisSerial(ACTIVE.NC) THEN
@@ -1608,52 +1618,7 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
     ELSE
       'local to server
       IF TUIquestion("LOCAL" + RIGHT.NC + "SERVER COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
-        NCserialOut("W" + NCgetName(source) + "|" + STR$(fileLen))
-        partData = NCreadUntilLF()
-        IF partData = "READY" THEN
-          partNum = fileLen \ partLen
-          partRem = fileLen MOD partLen
-
-          IF fileLen > 5000 THEN
-            dialog = TUIwaitingON("LOCAL" + RIGHT.NC + "SERVER COPY " + STR$(fileLen) + " bytes")
-          ENDIF
-
-          OPEN source FOR INPUT AS #2
-
-          FOR i = 1 TO partNum
-            IF fileLen > 5000 THEN
-              TUIwaitingProgress(dialog, 100 * i / partNum)
-            ENDIF
-            partData = INPUT$(partLen, #2)
-            DO WHILE LOF(#1) < partRem
-            LOOP
-            ?#1, partData;         
-          NEXT i 
-
-          IF partRem > 0 THEN
-            partData = INPUT$(partRem, #2)
-            DO WHILE LOF(#1) < partRem
-            LOOP
-            ?#1, partData;         
-          ENDIF
-
-          CLOSE #2
-
-          IF fileLen > 5000 THEN
-            TUIwaitingOFF(dialog)
-          ENDIF
-          'dialog = TUIwaitingON("WAITING FOR SERVER RESPONSE")
-
-          partData = NCreadUntilLF()
-          'TUIwaitingOFF(dialog)
-          IF partData = "DONE" THEN
-            NCserialOut("D" + NON_PATH.NC)
-            NCserialDir(1-ACTIVE.NC)
-            POS.NC(1-ACTIVE.NC) = 0
-            CURSOR.NC(1-ACTIVE.NC) = 0
-            NCredrawPane(1-ACTIVE.NC)
-          ENDIF
-        ENDIF
+        NCfileToServer(source, dest)
       ENDIF
     ENDIF
   ELSE
@@ -1661,6 +1626,50 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
     IF TUIquestion("SERVER" + RIGHT.NC + "LOCAL COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
       NCfileFromServer(source, dest)
       NCchangeDir(1-ACTIVE.NC, NON_PATH.NC)
+    ENDIF
+  ENDIF
+END SUB
+
+SUB NCfileToServer(source AS STRING, dest AS STRING)
+  CONST partLen = 250
+  LOCAL STRING partData, dialog
+  LOCAL INTEGER partNum, partRem, fileLen = MM.INFO(FILESIZE source), i, bufLen
+
+  NCserialOut("W" + NCgetName(source) + "|" + STR$(fileLen))
+  partData = NCreadUntilLF()
+  IF partData = "READY" THEN
+    partNum = fileLen \ partLen
+    partRem = fileLen MOD partLen
+
+    IF fileLen > 5000 THEN
+      dialog = TUIwaitingON("LOCAL" + RIGHT.NC + "SERVER COPY " + STR$(fileLen) + " bytes")
+    ENDIF
+
+    OPEN source FOR INPUT AS #2
+    FOR i = 1 TO partNum
+      IF fileLen > 5000 THEN
+        TUIwaitingProgress(dialog, 100 * i / partNum)
+      ENDIF
+      ?#1, INPUT$(partLen, #2);       
+    NEXT i 
+
+    IF partRem > 0 THEN
+      ?#1, INPUT$(partRem, #2);
+    ENDIF
+
+    CLOSE #2
+
+    IF fileLen > 5000 THEN
+      TUIwaitingOFF(dialog)
+    ENDIF
+
+    partData = NCreadUntilLF()
+    IF partData = "DONE" THEN
+      NCserialOut("D" + NON_PATH.NC)
+      NCserialDir(1-ACTIVE.NC)
+      POS.NC(1-ACTIVE.NC) = 0
+      CURSOR.NC(1-ACTIVE.NC) = 0
+      NCredrawPane(1-ACTIVE.NC)
     ENDIF
   ENDIF
 END SUB
@@ -3036,12 +3045,12 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
   NCchangeDir(1 - ACTIVE.NC, NON_PATH.NC)
 END SUB
 
-SUB NCfileFromServer(sRC AS STRING, dst AS STRING)
+SUB NCfileFromServer(src AS STRING, dst AS STRING)
   'copy fir from server to local
 
   CONST partLen = 250
   LOCAL STRING lineSerial, partData, dialog
-  LOCAL INTEGER i, fileLen, partNum, partRem
+  LOCAL INTEGER i, fileLen, partNum, partRem, bufLen
 
   NCserialOut("R" + src + "|" + STR$(partLen))
   partData = NCreadUntilLF()
@@ -3050,24 +3059,34 @@ SUB NCfileFromServer(sRC AS STRING, dst AS STRING)
     partNum = fileLen \ partLen
     partRem = fileLen MOD partLen
     dialog = TUIwaitingON("SERVER" + RIGHT.NC + "LOCAL " + STR$(fileLen) + " bytes")
+
+    LONGSTRING CLEAR BUFFER.NC()
+    bufLen = 0
     NCserialOut("START")         
 
     OPEN dst FOR OUTPUT AS #2
 
     FOR i = 1 TO partNum
-      TUIwaitingProgress(dialog, 100 * i / partNum)
+      IF bufLen + partLen > BUFFER_LEN.NC THEN
+        LONGSTRING PRINT #2, BUFFER.NC();
+        LONGSTRING CLEAR BUFFER.NC()
+        bufLen = 0
+      ENDIF
       NCserialOut("NEXT")         
-      DO WHILE LOC(#1) < partLen
-      LOOP
-      partData = INPUT$(partLen, #1)
-      ?#2, partData;
+      TUIwaitingProgress(dialog, 100 * i / partNum)
+      DO WHILE LOC(#1) < partLen: LOOP
+      LONGSTRING APPEND BUFFER.NC(), INPUT$(partLen, #1)
+      INC bufLen, partLen
     NEXT i
+    IF bufLen > 0 THEN
+      LONGSTRING PRINT #2, BUFFER.NC();
+      LONGSTRING CLEAR BUFFER.NC()
+      bufLen = 0
+    ENDIF
     IF partRem > 0 THEN
       NCserialOut("NEXT")         
-      DO WHILE LOC(#1) < partRem
-      LOOP
-      partData = INPUT$(partRem, #1)
-      ?#2, partData;         
+      DO WHILE LOC(#1) < partRem: LOOP
+      ?#2, INPUT$(partRem, #1);
     ENDIF
 
     CLOSE #2
