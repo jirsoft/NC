@@ -2,8 +2,32 @@
  Napoleon Commander
 
 Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2,
-you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC)
+you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC). 
 You need also install **pyserial** with `pip install pyserial`.
+Starting **NCserver.py** without arguments use defaults from begin of the Python script, arguments can any combination of:
+```
+NCserver.py -s <serverdir> -p <portname> -b <baudrate>
+  <serverdir>
+    base directory for NCserver, Napoleon Commander on CMM2 see just inside of this
+
+  <portname>
+    serial port used for communication with Napoleon Commander on CMM2
+
+  <baudrate>
+    speed of serial port, need to be the same as set in Napoleon Commander
+    (F11, option 6 checked=691200, unchecked=230400)
+```
+or 
+`NCserver.py -h` for help.
+
+
+
+### VERSION HISTORY
+#### v0.95
+	use LONGSTRING in serial transfer FROM SERVER, big speedup
+	(400 MHz CMM2 without WS board, 66/31 kB/s to/from server, 480 Mhz CMM2 Deluxe 66/14 kB/s, why?) 
+	command line arguments for NCserver.py (baudrate, port, serverdir)
+	on NCserver.py start check for non-ASCII characters in file/dir names (inside of serverdir)
 
 #### v0.93
 	bug fix (problem with dimensioning array with just 1 member, LOCAL STRING a(0) is not allowed)
