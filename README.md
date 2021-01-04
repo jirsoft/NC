@@ -3,6 +3,7 @@
 
 Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2,
 you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC)
+You need also install **pyserial** with `pip install pyserial`.
 
 #### v0.93
 	bug fix (problem with dimensioning array with just 1 member, LOCAL STRING a(0) is not allowed)
