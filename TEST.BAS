@@ -34,7 +34,7 @@ DO
         SELECT CASE LCASE$(s)
           CASE "@connect"
             ?
-            ESPsend(s + "(JirNET,jirickovOSit)", LF.ESP)
+            ESPsend(s + "(****,****)", LF.ESP)
 
           CASE "@speedtest"
             ?
