@@ -1,8 +1,9 @@
 '''#MMDEBUG ON
 OPTION BREAK 0
 
-CONST ESP_SSID.NC = "name of my network"
-CONST ESP_PASS.NC = "password to my network"
+CONST MIN_VERSION.NC = 5.06
+CONST ESP_SSID.NC = "NETWORK name"
+CONST ESP_PASS.NC = "PASSWORD to you network"
 
 OPTION EXPLICIT
 OPTION DEFAULT NONE
@@ -10,7 +11,7 @@ OPTION BASE 0
 OPTION CRLF CR
 
 'Napoleon Commander
-CONST VERSION = "0.98"
+CONST VERSION = "0.99"
 
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
@@ -110,7 +111,7 @@ ON KEY 157, NCprintScreen
 DO
   IF SS.NC <> "" THEN 'screenshot was prepared
     PAGE WRITE 1
-    CLS
+    CLS RGB(NOTBLACK)
     BLIT WRITE #64,VAL(FIELD$(SS.NC,1,",")),VAL(FIELD$(SS.NC,2,","))
     PAGE WRITE 0
     HLPsaveBMP(NCnewName(ACT_PATH.NC, "ScreenShot.BMP"),VAL(FIELD$(SS.NC,1,",")),VAL(FIELD$(SS.NC,2,",")),VAL(FIELD$(SS.NC,3,",")),VAL(FIELD$(SS.NC,4,",")), 1)
@@ -180,6 +181,8 @@ LOOP
 END
 
 SUB NCespTest
+  'test for ESP8266
+
   OPEN ESP_INIT.NC AS #1
 
     ?#1, "@ver" + LF.NC;
@@ -191,6 +194,8 @@ SUB NCespTest
 END SUB
 
 SUB NCespConnect(SSID AS STRING, PASS AS STRING)
+  'connect ESP8266 to local network
+
   LOCAL STRING conn = "@connect(" + SSID + "," + PASS + ")"
 
   OPEN ESP_INIT.NC AS #1
@@ -203,6 +208,8 @@ SUB NCespConnect(SSID AS STRING, PASS AS STRING)
 END SUB
 
 SUB NCespReboot
+  'reboots ESP8266
+
   OPEN "COM1:691200,1024" AS #1
     ?#1, "@reboot" + CHR$(10);
   CLOSE #1
@@ -461,7 +468,7 @@ SUB NCconfigLoad
   IF MM.ERRNO = 0 THEN
     LINE INPUT #3, sCfg
     iCfg = VAL("&b"+sCfg)
-    CLS
+    CLS RGB(NOTBLACK)
     NCconfigUnpack(iCfg)
     CLOSE #3
   ENDIF
@@ -632,35 +639,34 @@ SUB NChelp
       'TUIwarning("HELP","You was no able to choose :-(")
 
     CASE 0
-      LOCAL STRING shrt(27) LENGTH 100
-      shrt( 0) = "          Napoleon Commander " + VERSION
+      LOCAL STRING shrt(26) LENGTH 100
+      shrt( 0) = "ALT+F1/F2   Selects source for left or right pane (SD card or SERVER)"
       shrt( 1) = ""
-      shrt( 2) = "ALT+F1/F2 Selects source for left or right pane (SD card or SERVER)"
-      shrt( 3) = ""
-      shrt( 4) = CHR$(225) + " " + CHR$(226) + "       Up/Down  Moves row on active pane"
-      shrt( 5) = "Home/End  Jumps to first/last row"
-      shrt( 6) = "TAB       Switches active pane"
-      shrt( 7) = "Keys a-z  Jumps to first item with this char on begin in DIRs or FILEs,"
-      shrt( 8) = "          second press jumps between DIR and FILE"
-      shrt( 9) = "ENTER     Changes active directory or invokes action"
-      shrt(10) = "ESC       Jumps to parent directory if present"
-      shrt(11) = "Shift+H   Shows or hides hidden items"
-      shrt(12) = "Shift+U   Unsorted directory layout"
-      shrt(13) = "PrintScr  Saves screen to 'ScreenShot.BMP', with ALT just dialog"
-      shrt(14) = ""
-      shrt(15) = "F1        Displays Help screem"
-      shrt(16) = "F2        Gets size for DIR, info for FILE"
-      shrt(17) = "F3        Quick (& dirty) text file viewer, ALT+F3 forces HEX viewer"
-      shrt(18) = "F4        Quick editor (not done yet), ALT+F4 starts BASIC helpers"
-      shrt(19) = "F5        Copies FILE or DIR, ALT+F5 moves"
-      shrt(20) = "F6        Renames FILE or DIR"
-      shrt(21) = "F7        Creates new directory"
-      shrt(22) = "F8        Deletes FILE or DIR"
-      shrt(23) = "F9        Archive DIR tree, ALT+F9 compress FILE"
-      shrt(24) = "F10       Displays box about Napoleon Commander, ALT+F10 quits this app"
-      shrt(25) = "F11       NC Configuration"
-      shrt(26) = "F12       Duplicates view to inactive pane"
-      shrt(27) = ""
+      shrt( 2) = CHR$(225) + " " + CHR$(226) + "         Up/Down  Moves row on active pane"
+      shrt( 3) = "Home/End    Jumps to first/last row on the screen (with ALT total begin/end)"
+      shrt( 4) = "PgUP/PgDOWN Paging in list"
+      shrt( 5) = "TAB         Switches active pane"
+      shrt( 6) = "Keys a-z    Jumps to first item with this char on begin in DIRs or FILEs,"
+      shrt( 7) = "            second press jumps between DIR and FILE"
+      shrt( 8) = "ENTER       Changes active directory or invokes action"
+      shrt( 9) = "ESC         Jumps to parent directory if present"
+      shrt(10) = "Shift+H     Shows or hides hidden items"
+      shrt(11) = "Shift+U     Unsorted directory layout"
+      shrt(12) = "PrintScr    Saves screen to 'ScreenShot.BMP', with ALT just dialog"
+      shrt(13) = ""
+      shrt(14) = "        F1  Displays HELP screen(s)"
+      shrt(15) = "        F2  Gets size for DIR, info for FILE"
+      shrt(16) = "        F3  Quick (& dirty) TEXT file viewer, ALT+F3 forces HEX viewer"
+      shrt(17) = "        F4  Quick editor (not done yet), ALT+F4 starts BASIC helpers"
+      shrt(18) = "        F5  Copies FILE or DIR, ALT+F5 moves"
+      shrt(19) = "        F6  Renames FILE or DIR"
+      shrt(20) = "        F7  Creates new DIRECTORY"
+      shrt(21) = "        F8  Deletes FILE or DIR"
+      shrt(22) = "        F9  Archive DIR tree, ALT+F9 compress FILE"
+      shrt(23) = "       F10  Shows INFO box, ALT+F10 QUITs this app"
+      shrt(24) = "       F11  NC Configuration"
+      shrt(25) = "       F12  Duplicates view from active to inactive pane"
+      shrt(26) = ""
   
       TUIinfo("KEYBOARD SHORTCUTs",shrt())
       
@@ -763,8 +769,11 @@ SUB NCaction(p AS STRING, s AS STRING)
       OPTION BREAK 3
       EXECUTE extAction
 
+    CASE "SPR"
+      NCviewTXT(p + s)
+
     CASE "BMP"
-      CLS
+      CLS RGB(NOTBLACK)
       LOAD BMP p+s
       TUIwaitForNoKey
       TUIwaitForKey
@@ -775,7 +784,7 @@ SUB NCaction(p AS STRING, s AS STRING)
       NCdrawMenu
       
     CASE "JPG"
-      CLS
+      CLS RGB(NOTBLACK)
       LOAD JPG p+s
       TUIwaitForNoKey
       TUIwaitForKey
@@ -786,7 +795,7 @@ SUB NCaction(p AS STRING, s AS STRING)
       NCdrawMenu
 
     CASE "PNG"
-      CLS
+      CLS RGB(NOTBLACK)
       LOAD PNG p+s
       TUIwaitForNoKey
       TUIwaitForKey
@@ -797,7 +806,7 @@ SUB NCaction(p AS STRING, s AS STRING)
       NCdrawMenu
 
     CASE "GIF"
-      CLS
+      CLS RGB(NOTBLACK)
       LOAD GIF p+s
       TUIwaitForNoKey
       TUIwaitForKey
@@ -851,7 +860,7 @@ SUB NCredrawPane(side AS INTEGER)
   IF LEN(short)>46 THEN short = LEFT$(short,45)+"~"
 
   PAGE WRITE 1
-  BOX 400*side,0,400,568,0,,RGB(BLACK)
+  BOX 400*side,0,400,568,0,,RGB(NOTBLACK)
   BOX 400*side,0,400,566,0,,RGB(BLUE)
   BOX 400*side+1,0+6,400-3,568-15,2,RGB(WHITE),RGB(BLUE)
   IF side = ACTIVE.NC THEN
@@ -911,7 +920,7 @@ FUNCTION NCdateTime(f AS STRING) AS STRING
   'prepare date and time of file
 
   LOCAL STRING dt = MM.INFO$(MODIFIED f)
-  IF dt<>"" THEN dt = MID$(dt, 3, 14)
+  IF dt <> "" THEN dt = MID$(dt, 3, 14)
   NCdateTime = dt
 END FUNCTION
 
@@ -919,10 +928,10 @@ FUNCTION NCsize(f AS STRING) AS STRING
   'prepare file size
 
   LOCAL INTEGER s = MM.INFO(FILESIZE f)
-  IF s<0 THEN
+  IF s < 0 THEN
     NCsize = "DIRECTORY"
   ELSE
-    NCsize = STR$(s,9,0)
+    NCsize = STR$(s, 9, 0)
   ENDIF
 END FUNCTION
 
@@ -1001,14 +1010,14 @@ END FUNCTION
 SUB NCdrawCL(p AS STRING)
   'outputs command line
 
-  BOX 0,568,800,16,0,,RGB(BLACK)
-  TEXT 3*8, 568,p,"LT",8,,RGB(WHITE),RGB(BLACK)
+  BOX 0,568,800,16,0,,RGB(NOTBLACK)
+  TEXT 3*8, 568,p,"LT",8,,RGB(WHITE),RGB(NOTBLACK)
   TEXT 800,568,NCdigital(VERSION),"RT",8,,RGB(RED)
   IF HIDDEN.NC THEN
-    TEXT 0,568,"H","LT",8,,RGB(RED),RGB(BLACK)
+    TEXT 0,568,"H","LT",8,,RGB(RED),RGB(NOTBLACK)
   ENDIF
   IF UNSORT.NC THEN
-    TEXT 8,568,"U","LT",8,,RGB(RED),RGB(BLACK)
+    TEXT 8,568,"U","LT",8,,RGB(RED),RGB(NOTBLACK)
   ENDIF
 END SUB
 
@@ -1198,12 +1207,12 @@ SUB NCviewHEX(filePath AS STRING)
   LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, change = 0, b, po = 0, i
   LOCAL STRING li,k
 
-  CLS
+  CLS RGB(NOTBLACK)
   BOX 0,16,800,600-32,0,,RGB(CYAN)
   LINE 0,7,800,7,2,RGB(WHITE)
   LINE 0,600-8,800,600-8,2,RGB(WHITE)
-  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(BLACK)
-  TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
+  TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
 
   OPEN filePath FOR RANDOM AS #3
 
@@ -1213,7 +1222,7 @@ SUB NCviewHEX(filePath AS STRING)
     cnt = 0 
     row = 0
   
-    TEXT 400,600-16," Position " + HEX$(po,8) + " of " + HEX$(si,8) + " ","CT",8,,RGB(WHITE),RGB(BLACK)
+    TEXT 400,600-16," Position " + HEX$(po,8) + " of " + HEX$(si,8) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
 
     PAGE WRITE 1
     BOX 0,16,800,600-32,0,,RGB(CYAN)
@@ -1224,11 +1233,11 @@ SUB NCviewHEX(filePath AS STRING)
       TEXT 44,firstRow + row, RIGHT$(HEX$(po+cnt,8),4), "LT",8,,RGB(BLUE), RGB(CYAN)
       FOR i = 0 TO MIN(LEN(li)-1,15)
         b = ASC(MID$(li,i+1,1))
-        TEXT 112+i*32,firstRow + row, HEX$(b,2),"LT",8,,RGB(BLACK), RGB(CYAN)
+        TEXT 112+i*32,firstRow + row, HEX$(b,2),"LT",8,,RGB(NOTBLACK), RGB(CYAN)
         IF b>=32 AND b<=127 THEN
-          TEXT 640+i*8,firstRow + row, CHR$(b),"LT",8,,RGB(BLACK), RGB(CYAN)
+          TEXT 640+i*8,firstRow + row, CHR$(b),"LT",8,,RGB(NOTBLACK), RGB(CYAN)
         ELSE
-          TEXT 640+i*8,firstRow + row, ".","LT",8,,RGB(BLACK), RGB(CYAN)
+          TEXT 640+i*8,firstRow + row, ".","LT",8,,RGB(NOTBLACK), RGB(CYAN)
         ENDIF
       NEXT i          
       row = row + 16
@@ -1267,12 +1276,12 @@ END SUB
 SUB NCviewTXT(filePath AS STRING)
   'simple text viewer
 
-  CLS
+  CLS RGB(NOTBLACK)
   BOX 0,16,800,600-32,0,,RGB(CYAN)
   LINE 0,7,800,7,2,RGB(WHITE)
   LINE 0,600-8,800,600-8,2,RGB(WHITE)
-  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(BLACK)
-  TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
+  TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
 
   LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, pg = 0, crPos, lfPos
   LOCAL INTEGER maxpage = 0, viewpage = 0, change = 0
@@ -1321,7 +1330,7 @@ SUB NCviewTXT(filePath AS STRING)
     LOOP
     
     BOX 0,16,800,600-32,0,,RGB(CYAN)
-    TEXT 400,600-16," Page " + STR$(pg+1) + "/" + STR$(maxpage+1) + " ","CT",8,,RGB(WHITE),RGB(BLACK)
+    TEXT 400,600-16," Page " + STR$(pg+1) + "/" + STR$(maxpage+1) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
 
     row = 0
     DO WHILE (row < 35*16) AND NOT EOF(#3)
@@ -1332,7 +1341,7 @@ SUB NCviewTXT(filePath AS STRING)
       'IF lfPos > 0 THEN li = LEFT$(li, lfPos - 1)  
       LINE INPUT #3, li
       IF LEN(li)>100 THEN li = LEFT$(li,100)
-      TEXT 0,firstRow + row, li,"LT",8,,RGB(BLACK), RGB(CYAN)
+      TEXT 0,firstRow + row, li,"LT",8,,RGB(NOTBLACK), RGB(CYAN)
       row = row + 16 
     LOOP
     CLOSE #3
@@ -1370,6 +1379,10 @@ SUB NCview
   ELSE
 
     SELECT CASE ex
+
+    CASE "SPR"
+      'sprite view
+      NCviewSPR(ACT_PATH.NC + SEL_NAME.NC)
 
     CASE "TXT", "BAS", "BAK", "INC", "FNT", "PLY"
       'text view
@@ -1410,13 +1423,84 @@ SUB NCview
   ENDIF
 END SUB
 
+SUB NCviewSPR(filePath AS STRING)
+  'simple sprite viewer
+
+
+  ON ERROR SKIP
+  OPEN filePath FOR INPUT AS #3
+  IF MM.ERRNO = 0 THEN
+    LOCAL STRING s = "'", c
+    DO WHILE LEFT$(s, 1) = "'"
+      LINE INPUT #3, s
+    LOOP
+    LOCAL INTEGER w = VAL(FIELD$(s, 1, ",")), ww = w
+    LOCAL INTEGER x, y, cc
+    s = FIELD$(s, 3, ",")
+    LOCAL INTEGER h = VAL(s), hh, yy
+    IF h = 0 THEN h = w
+    hh = h + 16
+    LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h), ww, hh)
+
+    yy = VAL(FIELD$(dialog, 4, ",")) + 8
+    FOR y = 0 TO h - 1
+      s = "'"
+      DO WHILE LEFT$(s, 1) = "'"
+        LINE INPUT #3, s
+      LOOP
+      FOR x = 1 TO LEN(s)
+        c = MID$(s, x, 1)
+        IF c >= "0" AND c <= "7" THEN
+          cc = NCgetCMMcolor(ASC(c) - 48)
+          PIXEL (MM.HRES \ 2) - (w \ 2) + x - 1, yy + y, cc
+        ENDIF
+      NEXT x 
+    NEXT y
+    CLOSE #3
+
+    TUIwaitForNoKey
+    TUIwaitForKey
+    TUIwaitForNoKey
+    TUIemptyOFF(dialog)
+  ENDIF
+END SUB
+
+FUNCTION NCgetCMMcolor(n AS INTEGER) AS INTEGER
+  NCgetCMMcolor = RGB(NOTBLACK)
+  SELECT CASE n
+    CASE 0
+      NCgetCMMcolor = RGB(NOTBLACK)
+
+    CASE 1
+      NCgetCMMcolor = RGB(BLUE)
+
+    CASE 2
+      NCgetCMMcolor = RGB(GREEN)
+
+    CASE 3
+      NCgetCMMcolor = RGB(CYAN)
+
+    CASE 4
+      NCgetCMMcolor = RGB(RED)
+
+    CASE 5
+      NCgetCMMcolor = RGB(PURPLE)
+
+    CASE 6
+      NCgetCMMcolor = RGB(YELLOW)
+
+    CASE 7
+      NCgetCMMcolor = RGB(WHITE)
+
+  END SELECT 
+END FUNCTION
+
 SUB NCviewBMP(filePath AS STRING)
   'simple BMP viewer
 
   LOCAL STRING b
-  LOCAL INTEGER tw, w, h, bpp, nw, nh
-
-  LOCAL STRING ccc = TUIwaitingON("BMP VIEW")
+  LOCAL INTEGER w, h, bpp, nw, nh, ww, hh, yy
+  LOCAL INTEGER mw = MM.HRES - 32, mh = MM.VRES - 64
   OPEN filePath FOR INPUT AS #3
   b = INPUT$(2, #3)
   SELECT CASE b
@@ -1431,44 +1515,35 @@ SUB NCviewBMP(filePath AS STRING)
       bpp = STR2BIN(UINT16, b)
       CLOSE #3
       
-      PAGE WRITE 2
-      LOAD BMP filePath
       PAGE WRITE 1
-      PAGE COPY 0 TO 1
-      nw = w:nh = h
-      IF nw > 600 THEN
-        nw = 600
-        nh = nh*600/w
-      ENDIF
-      IF nh > 500 THEN
-        nw = nw*500/nh
-        nh = 500
-      ENDIF
-      TUIwaitingOFF(ccc)
-      BOX (800-nw)/2-4, (600-nh)/2-5,nw+8,nh+10,0,RGB(GREEN),RGB(GREEN)
-      BOX (800-nw)/2-4, (600-nh)/2-5,nw+8,nh+10,2,RGB(BLACK)
-
-      tw = 8*LEN(filePath+", "+STR$(w)+"x"+STR$(h)+", "+STR$(bpp)+"bpp")      
-      BOX (800-tw)/2-4, (600-nh)/2+4+nh,tw+8,24,0,RGB(GREEN),RGB(GREEN)
-      BOX (800-tw)/2-4, (600-nh)/2+4+nh,tw+8,24,2,RGB(BLACK)
-      IMAGE RESIZE 0,0,w,h,(800-nw)/2, (600-nh)/2,nw,nh,2
-      TEXT 400,(600-nh)/2+nh+8,filePath+", "+STR$(w)+"x"+STR$(h)+", "+STR$(bpp)+"bpp","CT",8,,RGB(BLACK), RGB(GREEN)
+      LOAD BMP filePath
       PAGE WRITE 0
-      PAGE COPY 1 TO 0
+      nw = w:nh = h
+      IF nw > mw THEN
+        nw = mw
+        nh = nh*mw/w
+      ENDIF
+      IF nh > mh THEN
+        nw = w*mh/nh
+        nh = mh
+      ENDIF
+      hh = nh
+      ww = nw
 
+      LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", ww, hh)
+      yy = VAL(FIELD$(dialog, 4, ",")) + 4
+
+      IMAGE RESIZE 0, 0, w, h, (MM.HRES - nw) \ 2, yy, nw, nh, 1
 
   END SELECT
   TUIwaitForNoKey
   TUIwaitForKey
   TUIwaitForNoKey
-  NCredrawPane(0)
-  NCredrawPane(1)  
-  NCcursor(ACTIVE.NC,1)
-  NCdrawMenu
+  TUIemptyOFF(dialog)
 END SUB
 
 FUNCTION NCprepareLogo(f AS STRING) AS INTEGER
-  'read ICN file
+  'read SPR file
 
   LOCAL INTEGER i, w = 0, h = 0
   LOCAL STRING s
@@ -1476,23 +1551,26 @@ FUNCTION NCprepareLogo(f AS STRING) AS INTEGER
   ON ERROR SKIP
   OPEN NC_PATH.NC + f FOR INPUT AS #5
   IF MM.ERRNO = 0 THEN
+    LINE INPUT #5, s
+    w = VAL(FIELD$(s, 1, ","))
+    'h = VAL(FIELD$(s, 3, ","))
     NCprepareLogo = 63
     PAGE WRITE 1
     CLS RGB(BLACK)
     DO WHILE NOT EOF(#5)
       LINE INPUT #5,s
-      w = MAX(w, LEN(s))
       FOR i = 1 TO LEN(s)
-        IF MID$(s,i,1)<>" " THEN
-          PIXEL i-1,h,RGB(GRAY)
+        IF MID$(s, i, 1)<>" " THEN
+          PIXEL i-1, h, RGB(NOTBLACK)
         ENDIF
       NEXT i
       INC h
     LOOP
     INC h
     CLOSE #5
-    BLIT READ #63,0,0,w,h
+    BLIT READ #63, 0, 0, w, h
     PAGE WRITE 0
+
   ELSE
     NCprepareLogo = 0
   ENDIF
@@ -1866,8 +1944,15 @@ END SUB
 SUB NCinit
   'INIT
 
+  IF MM.INFO(VERSION) < MIN_VERSION.NC THEN
+    CLS
+    ? "MMBASIC version is too old, at least " + STR$(MIN_VERSION.NC,1,2) + " is needed. you have " + STR$(MM.INFO(VERSION), 1, 2)
+    OPTION BREAK 3
+    END
+  ENDIF
+
   INIT.NC = 1
-  LOGO.NC = NCprepareLogo("NAPOLEON.ICN")
+  LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
 
   NCconfigLoad
   IF CFG_HighColor.NC THEN
@@ -1888,7 +1973,7 @@ SUB NCinit
 
   LOAD FONT NC_PATH.NC + "AtariST.FNT"
   FONT #8,1
-  CLS
+  CLS RGB(NOTBLACK)
   NCsetMenu(0, "Help", 1)
   NCsetMenu(1, "GetInf", 1)
   NCsetMenu(2, "Viewer" , 1)
@@ -1930,10 +2015,10 @@ SUB NCdrawMenuPart(fn AS INTEGER)
     xx = 4 + (fn - 1) * 56
     IF fn > 1 THEN xx = xx +  (fn-1)*9
     IF fn > 10 THEN xx = xx + (fn-10) *8 
-    TEXT xx, 584, STR$(fn,0,0),,,, RGB(WHITE), RGB(BLACK)
+    TEXT xx, 584, STR$(fn,0,0),,,, RGB(WHITE), RGB(NOTBLACK)
     xx = xx + 8
     IF fn > 9 THEN xx = xx + 8  
-    TEXT xx,584, MENU.NC(fn-1),,,,RGB(BLACK),back
+    TEXT xx,584, MENU.NC(fn-1),,,,RGB(NOTBLACK),back
   END IF
 END SUB
 
@@ -1941,7 +2026,7 @@ SUB NCdrawMenu
   'draws menu at bottom
   LOCAL INTEGER i, back, xx = 2
 
-  BOX 0,600-16,800,16,0,,RGB(BLACK)
+  BOX 0,600-16,800,16,0,,RGB(NOTBLACK)
   FOR i = 1 TO 12
     NCdrawMenuPart(i)
   NEXT i    
@@ -2177,14 +2262,14 @@ SUB NCviewMAR(filePath AS STRING)
   
   EXT_ERR.NC = 0
 
-  CLS
+  CLS RGB(NOTBLACK)
   BOX 0,16,800,600-32,0,,RGB(CYAN)
   LINE 0,7,800,7,2,RGB(WHITE)
   LINE 0,600-8,800,600-8,2,RGB(WHITE)
-  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
   BOX 0,16,800,600-32,0,,RGB(CYAN)
-  TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(BLACK)
-  TEXT 0,600-16,"PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
+  TEXT 0,600-16,"PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
 
   OPEN filePath FOR INPUT AS #3
   DO WHILE NOT EOF(#3)
@@ -2196,7 +2281,7 @@ SUB NCviewMAR(filePath AS STRING)
         DO WHILE LEFT$(par,1)="." OR LEFT$(par,1)="/"
           par = MID$(par,2)      
         LOOP
-        TEXT 0,firstRow + row, SPACE$(2*indent) + "DIR "+par,"LT",8,,RGB(BLACK), RGB(CYAN)
+        TEXT 0,firstRow + row, SPACE$(2*indent) + "DIR "+par,"LT",8,,RGB(NOTBLACK), RGB(CYAN)
         indent = indent + 2
         row = row + 16 
     
@@ -2205,7 +2290,7 @@ SUB NCviewMAR(filePath AS STRING)
         curLen = 0
         LINE INPUT #3, li
         fiLen = VAL(li)
-        TEXT 0,firstRow + row, SPACE$(2*indent) + "FILE " + par + " (" + STR$(fiLen) + " bytes)","LT",8,,RGB(BLACK), RGB(CYAN)
+        TEXT 0,firstRow + row, SPACE$(2*indent) + "FILE " + par + " (" + STR$(fiLen) + " bytes)","LT",8,,RGB(NOTBLACK), RGB(CYAN)
         row = row + 16 
         DO WHILE curLen < fiLen        
           chunkLen = MIN(fiLen - curLen,maxChunkSize)
@@ -2216,11 +2301,11 @@ SUB NCviewMAR(filePath AS STRING)
 
       CASE "ENDDIR"
         indent = indent - 2
-        TEXT 0,firstRow + row, SPACE$(2*indent) + "END DIR","LT",8,,RGB(BLACK), RGB(CYAN)
+        TEXT 0,firstRow + row, SPACE$(2*indent) + "END DIR","LT",8,,RGB(NOTBLACK), RGB(CYAN)
         row = row + 16 
         
       CASE "ENDARCHIVE"
-        TEXT 0,firstRow + row, SPACE$(2*indent) + "END ARCHIVE","LT",8,,RGB(BLACK), RGB(CYAN)
+        TEXT 0,firstRow + row, SPACE$(2*indent) + "END ARCHIVE","LT",8,,RGB(NOTBLACK), RGB(CYAN)
         row = row + 16 
               
     END SELECT
@@ -2233,11 +2318,11 @@ SUB NCviewMAR(filePath AS STRING)
         EXIT DO
       ELSE
         BOX 0,16,800,600-32,0,,RGB(CYAN)   
-        TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(BLACK)
+        TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
       ENDIF
     ENDIF
   LOOP
-  TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
 
   CLOSE #3
   DO WHILE k<>CHR$(27)
@@ -2494,6 +2579,8 @@ SUB NCfKeys(fkey AS INTEGER)
         ENDIF
       ELSE
         LOCAL STRING about(9) LENGTH 100
+        LOCAL STRING myVer = STR$(MM.INFO(VERSION), 1, 2) + "." + RIGHT$(STR$(MM.INFO(VERSION) * 10000, 5, 0),2)
+        LOCAL STRING myCMM2 = MM.DEVICE$ + " (" + LEFT$(STR$(MM.INFO(CPUSPEED)), 3) + "MHz), v" + myVer
         about(0) = "              My name is Napoleon Commander (" + NCdigital(VERSION) + ")"
         about(1) = ""
         about(2) = "              Born on: 7. November 2020"
@@ -2501,7 +2588,7 @@ SUB NCfKeys(fkey AS INTEGER)
         about(4) = "              Father : " + CHR$(157) + "JirSoft"
         about(5) = "              Mother : Unknown"
         about(6) = ""
-        about(7) = "              I'm living inside of Colour Maximite 2 "
+        about(7) = "              I'm living inside of " + myCMM2
         IF ESP_VERSION.NC <> "" THEN
           about(8)="              and have also implanted an special organ, " + ESP_VERSION.NC
         ENDIF
@@ -3275,16 +3362,18 @@ END FUNCTION
 SUB NCeditHEX(filePath AS STRING)
   'simple hex editor
 
+  IF NCisDir(SELECTED.NC) OR NCisSerial(ACTIVE.NC) THEN EXIT SUB 'N/A for DIR and SERVER
+
   LOCAL INTEGER si = MM.INFO(FILESIZE filePath)
   LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, change = 0, b, po = 0, i
   LOCAL STRING li,k
   LOCAL INTEGER cx = 0, cy = 0
-  CLS
+  CLS RGB(NOTBLACK)
   BOX 0,16,800,600-32,0,,RGB(CYAN)
   LINE 0,7,800,7,2,RGB(WHITE)
   LINE 0,600-8,800,600-8,2,RGB(WHITE)
-  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(BLACK)
-  TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(BLACK)
+  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
+  TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
 
   COPY filePath TO filePath + ".TMP"
 
@@ -3295,7 +3384,7 @@ SUB NCeditHEX(filePath AS STRING)
     cnt = 0 
     row = 0
   
-    TEXT 400,600-16," Position " + HEX$(po,8) + " of " + HEX$(si,8) + " ","CT",8,,RGB(WHITE),RGB(BLACK)
+    TEXT 400,600-16," Position " + HEX$(po,8) + " of " + HEX$(si,8) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
 
     PAGE WRITE 1
     BOX 0,16,800,600-32,0,,RGB(CYAN)
@@ -3306,11 +3395,11 @@ SUB NCeditHEX(filePath AS STRING)
       TEXT 44,firstRow + row, RIGHT$(HEX$(po+cnt,8),4), "LT",8,,RGB(BLUE), RGB(CYAN)
       FOR i = 0 TO MIN(LEN(li)-1,15)
         b = ASC(MID$(li,i+1,1))
-        TEXT 112+i*32,firstRow + row, HEX$(b,2),"LT",8,,RGB(BLACK), RGB(CYAN)
+        TEXT 112+i*32,firstRow + row, HEX$(b,2),"LT",8,,RGB(NOTBLACK), RGB(CYAN)
         IF b>=32 AND b<=127 THEN
-          TEXT 640+i*8,firstRow + row, CHR$(b),"LT",8,,RGB(BLACK), RGB(CYAN)
+          TEXT 640+i*8,firstRow + row, CHR$(b),"LT",8,,RGB(NOTBLACK), RGB(CYAN)
         ELSE
-          TEXT 640+i*8,firstRow + row, ".","LT",8,,RGB(BLACK), RGB(CYAN)
+          TEXT 640+i*8,firstRow + row, ".","LT",8,,RGB(NOTBLACK), RGB(CYAN)
         ENDIF
       NEXT i          
       row = row + 16

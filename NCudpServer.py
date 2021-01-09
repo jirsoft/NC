@@ -2,7 +2,7 @@
 #Napoleon Server
 #Simple server for CMM2  Napoleon Commander over network
 #JirSoft, 2020
-VER = 'v0.13'
+VER = 'v0.14'
 
 import socket
 from datetime import datetime
@@ -15,8 +15,19 @@ import time
 espIP = "10.0.13.180"
 ncPort = 34701
 
-hostname = socket.gethostname()
-ncIP = socket.gethostbyname(hostname)
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+    
+ncIP = get_ip()
 
 #used as server root, this server has no other access, can be given as command lineargument
 BASEDIR = "/Users/jirsoft/Documents/Maximite/NCserver/"
@@ -284,9 +295,8 @@ sock.settimeout(5)
 sock.bind((ncIP, ncPort))
 
 udpOut("NCudpServer")
-out ("Napoleon UDP Server started as:", -1)
 out (sys.argv[0]  + " -s '" + BASEDIR + "' -i '" + espIP + "' -v " + str(VERB_LEVEL), -1)
-out('and is listening on ' + ncIP + ':' + str(ncPort), -1)
+out ('Napoleon UDP Server ' + VER + ' is listening on ' + ncIP + ':' + str(ncPort), -1)
 
 while (True):
 	try:
