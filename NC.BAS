@@ -1,13 +1,16 @@
 '''#MMDEBUG ON
+OPTION BREAK 0
+
+CONST ESP_SSID.NC = "name of my network"
+CONST ESP_PASS.NC = "password to my network"
 
 OPTION EXPLICIT
 OPTION DEFAULT NONE
 OPTION BASE 0
 OPTION CRLF CR
-OPTION BREAK 0
 
 'Napoleon Commander
-CONST VERSION = "0.95"
+CONST VERSION = "0.98"
 
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
@@ -28,14 +31,19 @@ CONST ENTER.NC = CHR$(10)
 CONST CR.NC = CHR$(13)
 CONST LF.NC = CHR$(10)
 CONST INFO.NC = "FILEINFO.TXT"
-CONST SERIAL_TIMEOUT.NC = 300
+CONST SERIAL_TIMEOUT.NC = 10000
 
 CONST BUFFER_LEN.NC = 100000 
 DIM INTEGER BUFFER.NC(BUFFER_LEN.NC \ 8)
 DIM STRING SERIAL_INIT.NC = "COM3:230400,1024"
-DIM STRING SERIAL_IN.NC = ""
 DIM STRING SERIAL_PATH.NC = ""
 DIM INTEGER SERIAL_ON.NC = 0
+
+DIM INTEGER ESP.NC = 1
+DIM STRING ESP_INIT.NC = "COM1:691200,1024"
+DIM STRING ESP_CONNECTION.NC = "", ESP_VERSION.NC = ""
+DIM INTEGER ESP_ON.NC = 0
+CONST ESP_PREFIX.NC = "@NC_"
 
 DIM STRING STR.NC         'temporary string var
 DIM STRING NULL_S.NC 
@@ -83,9 +91,13 @@ DIM INTEGER CFG_DirFil.NC = 0
 DIM INTEGER CFG_TXTfb.NC = 0
 DIM INTEGER CFG_HighColor.NC = 0
 DIM INTEGER CFG_FastSerial.NC = 0
-DIM INTEGER CFG.NC
+DIM INTEGER CFG_ESP.NC = 0
 
 NCinit
+IF ESP.NC THEN 
+  NCespConnect(ESP_SSID.NC, ESP_PASS.NC)
+ENDIF
+
 
 NCchangeDir(0, "A:/")
 NCchangeDir(1, "A:/")
@@ -167,6 +179,36 @@ DO
 LOOP
 END
 
+SUB NCespTest
+  OPEN ESP_INIT.NC AS #1
+
+    ?#1, "@ver" + LF.NC;
+    ESP_VERSION.NC = NCreadUntilLF()
+    IF ESP_VERSION.NC <> "" THEN
+      ESP.NC = 1
+    ENDIF
+  CLOSE #1
+END SUB
+
+SUB NCespConnect(SSID AS STRING, PASS AS STRING)
+  LOCAL STRING conn = "@connect(" + SSID + "," + PASS + ")"
+
+  OPEN ESP_INIT.NC AS #1
+    ?#1, conn + LF.NC;
+    ESP_CONNECTION.NC = ""
+    DO WHILE ESP_CONNECTION.NC = ""
+      ESP_CONNECTION.NC = NCreadUntilLF()
+    LOOP
+  CLOSE #1
+END SUB
+
+SUB NCespReboot
+  OPEN "COM1:691200,1024" AS #1
+    ?#1, "@reboot" + CHR$(10);
+  CLOSE #1
+END SUB
+
+
 SUB NCprintScreen
   'store screenshot into memory
 
@@ -211,14 +253,30 @@ FUNCTION NCserialOK() AS INTEGER
 
   NCserialOK = 0
 
-  IF NOT SERIAL_ON.NC THEN
-    OPEN SERIAL_INIT.NC AS #1
-    SERIAL_ON.NC = 1
-  ENDIF
-  NCserialOut("?")     
-  lineSerial = NCreadUntilLF()
-  IF lineSerial = "OK" THEN
-    NCserialOK = 1
+  IF ESP.NC THEN
+    IF NOT ESP_ON.NC THEN
+      IF SERIAL_ON.NC THEN CLOSE #1
+      OPEN ESP_INIT.NC AS #1
+      ESP_ON.NC = 1
+    ENDIF
+    NCserialOut("?", 1)     
+    DO WHILE lineSerial = ""
+      lineSerial = NCreadUntilLF()
+    LOOP
+    IF lineSerial = "OK" THEN
+      NCserialOK = 1
+    ENDIF
+  ELSE
+    IF NOT SERIAL_ON.NC THEN
+      IF ESP_ON.NC THEN CLOSE #1
+      OPEN SERIAL_INIT.NC AS #1
+      SERIAL_ON.NC = 1
+    ENDIF
+    NCserialOut("?")     
+    lineSerial = NCreadUntilLF()
+    IF lineSerial = "OK" THEN
+      NCserialOK = 1
+    ENDIF
   ENDIF
 END FUNCTION
 
@@ -332,6 +390,7 @@ SUB NCconfig
         txt = txt + ",TEXT VIEWER fallback (BIN else)"
         txt = txt + ",HIGH COLOR mode"
         txt = txt + ",FAST SERIAL SERVER (691200bd)"
+        txt = txt + ",ESP8266 installed"
      
   LOCAL INTEGER sel = NCconfigPack()
   LOCAL INTEGER oldSel = sel
@@ -357,6 +416,14 @@ SUB NCconfig
     SERIAL_ON.NC = 0
     NULL_I.NC = NCserialOK()
   ENDIF
+  
+  IF oldSel AND 128 THEN
+    CFG_ESP.NC = 1
+    NCespTest
+  ELSE
+    CFG_ESP.NC = 0
+    ESP.NC = 0
+  ENDIF
   IF (oldSel AND 8) OR (oldSel AND 32) THEN 'changed MODE or items sorting
     NCchangeDir(0,PATH.NC(0))
     NCchangeDir(1,PATH.NC(1))
@@ -374,7 +441,7 @@ FUNCTION NCconfigPack() AS INTEGER
 
   NCconfigPack = CFG_ExtView.NC + 2*CFG_ExtAct.NC + 4*CFG_ESCup.NC
   NCconfigPack = NCconfigPack + 8*CFG_DirFil.NC + 16*CFG_TXTfb.NC + 32*CFG_HighColor.NC
-  NCconfigPack = NCconfigPack + 64*CFG_FastSerial.NC
+  NCconfigPack = NCconfigPack + 64*CFG_FastSerial.NC + 128*CFG_ESP.NC
 END FUNCTION
 
 SUB NCconfigSave(sel AS INTEGER)
@@ -403,6 +470,13 @@ SUB NCconfigLoad
   ELSE
     SERIAL_INIT.NC = "COM3:230400,1024"
   ENDIF
+  IF CFG_ESP.NC THEN
+    CFG_ESP.NC = 1
+    NCespTest
+  ELSE
+    CFG_ESP.NC = 0
+    ESP.NC = 0
+  ENDIF
 END SUB
 
 SUB NCconfigUnpack(sel AS INTEGER)
@@ -415,6 +489,7 @@ SUB NCconfigUnpack(sel AS INTEGER)
   CFG_TXTfb.NC = (sel AND 16) > 0
   CFG_HighColor.NC = (sel AND 32) > 0
   CFG_FastSerial.NC = (sel AND 64) > 0 
+  CFG_ESP.NC = (sel AND 128) > 0 
 END SUB
 
 SUB NCfindFirstChar(ch AS STRING)
@@ -620,7 +695,7 @@ SUB NCrenameItem
   STR.NC = TUIinput("RENAME ITEM", "New name:",NCnewName(ACT_PATH.NC, SEL_NAME.NC), FILECHARS.NC)
   IF STR.NC <> "" THEN
     IF NCisSerial(ACTIVE.NC) THEN
-      NCserialOut("N" + ACT_PATH.NC + SEL_NAME.NC + "|" + ACT_PATH.NC + STR.NC)
+      NCserialOut("N" + ACT_PATH.NC + SEL_NAME.NC + "|" + ACT_PATH.NC + STR.NC, 1)
       IF NCinsideTest(ACT_PATH.NC, NON_PATH.NC) THEN
         PATH.NC(1-ACTIVE.NC) = NCparent(NON_PATH.NC)
       ENDIF
@@ -1490,7 +1565,7 @@ SUB NCchangeDir(side AS INTEGER, p AS STRING)
 
   IF LEFT$(p, 3) = "S:/" THEN
     'TUIwarning("CHANGE DIR", "'" + p + "'")
-    NCserialOut("D" + p)
+    NCserialOut("D" + p, 1)
     NCserialDir(side)
     'PATH.NC(side) = SERIAL_PATH.NC
     POS.NC(side) = 0
@@ -1541,45 +1616,46 @@ FUNCTION NCreadUntilLF() AS STRING
   DO WHILE (one <> LF.NC) AND ((TIMER - timeout) < SERIAL_TIMEOUT.NC)
     IF LOC(#1) > 0 THEN
       one = INPUT$(1, #1)
-      IF one = LF.NC THEN
-        NCreadUntilLF = SERIAL_IN.NC
-        SERIAL_IN.NC = ""
-      ELSE
-        IF LEN(SERIAL_IN.NC) < 250 THEN
-          SERIAL_IN.NC = SERIAL_IN.NC + one
-        ELSE
-          SERIAL_IN.NC = one
+      IF one <> LF.NC THEN
+        IF LEN(NCreadUntilLF) < 250 THEN
+          CAT NCreadUntilLF, one
         ENDIF
       ENDIF
       timeout = TIMER
     ENDIF
-  LOOP  
+  LOOP
 END FUNCTION
 
 SUB NCserialDir(side AS INTEGER)
   'get dir from serial
 
   LOCAL INTEGER i, cnt
-  LOCAL STRING lineSerial
+  LOCAL STRING lineSerial = ""
 
-  lineSerial = NCreadUntilLF()
+  DO WHILE lineSerial = ""
+    lineSerial = NCreadUntilLF()
+  LOOP
   IF LEFT$(lineSerial, 1) = "D" THEN
     cnt = VAL(MID$(lineSerial,2)) - 1
     PATH.NC(side) = FIELD$(lineSerial, 2, "|")
     COUNT.NC(side) = -1
+
     FOR i = 0 TO cnt
+      lineSerial = ""
       NCserialOut("NEXT")         
-      lineSerial = NCreadUntilLF()
+      DO WHILE lineSerial = ""
+        lineSerial = NCreadUntilLF()
+      LOOP
       IF lineSerial <> "" THEN
-      IF MID$(lineSerial, 2, 1) = "." THEN
-        IF HIDDEN.NC OR LEFT$(lineSerial, 3) = "D.." THEN
+        IF MID$(lineSerial, 2, 1) = "." THEN
+          IF HIDDEN.NC OR LEFT$(lineSerial, 3) = "D.." THEN
+            COUNT.NC(side) = COUNT.NC(side) + 1 
+            ITEM.NC(side, COUNT.NC(side)) = lineSerial
+          ENDIF
+        ELSE
           COUNT.NC(side) = COUNT.NC(side) + 1 
           ITEM.NC(side, COUNT.NC(side)) = lineSerial
         ENDIF
-      ELSE
-        COUNT.NC(side) = COUNT.NC(side) + 1 
-        ITEM.NC(side, COUNT.NC(side)) = lineSerial
-      ENDIF
       ELSE
         COUNT.NC(side) = COUNT.NC(side) + 1 
         ITEM.NC(side, COUNT.NC(side)) = "???"
@@ -1605,10 +1681,14 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
     IF NCisSerial(ACTIVE.NC) THEN
       'server to server
       IF TUIquestion("SERVER" + RIGHT.NC + "SERVER COPY","Copy '" + NCgetName(source) + "' to '" + NCgetPath(dest) + "'?") THEN
-        NCserialOut("C" + source + "|" + dest)
-        partData = NCreadUntilLF()
+        NCserialOut("C" + source + "|" + dest, 1)
+
+        partData = ""
+        DO WHILE partData = ""
+          partData = NCreadUntilLF()
+        LOOP
         IF partData = "DONE" THEN
-          NCserialOut("D" + NON_PATH.NC)
+          NCserialOut("D" + NON_PATH.NC, 1)
           NCserialDir(1-ACTIVE.NC)
           POS.NC(1-ACTIVE.NC) = 0
           CURSOR.NC(1-ACTIVE.NC) = 0
@@ -1631,12 +1711,18 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
 END SUB
 
 SUB NCfileToServer(source AS STRING, dest AS STRING)
+  'copy file from local to server
+
   CONST partLen = 250
   LOCAL STRING partData, dialog
   LOCAL INTEGER partNum, partRem, fileLen = MM.INFO(FILESIZE source), i, bufLen
 
-  NCserialOut("W" + NCgetName(source) + "|" + STR$(fileLen))
-  partData = NCreadUntilLF()
+  NCserialOut("W" + NCgetName(source) + "|" + STR$(fileLen), 1)
+
+  partData = ""
+  DO WHILE partData = ""
+    partData = NCreadUntilLF()
+  LOOP
   IF partData = "READY" THEN
     partNum = fileLen \ partLen
     partRem = fileLen MOD partLen
@@ -1663,9 +1749,12 @@ SUB NCfileToServer(source AS STRING, dest AS STRING)
       TUIwaitingOFF(dialog)
     ENDIF
 
-    partData = NCreadUntilLF()
+    partData = ""
+    DO WHILE partData = ""
+      partData = NCreadUntilLF()
+    LOOP
     IF partData = "DONE" THEN
-      NCserialOut("D" + NON_PATH.NC)
+      NCserialOut("D" + NON_PATH.NC, 1)
       NCserialDir(1-ACTIVE.NC)
       POS.NC(1-ACTIVE.NC) = 0
       CURSOR.NC(1-ACTIVE.NC) = 0
@@ -1674,11 +1763,17 @@ SUB NCfileToServer(source AS STRING, dest AS STRING)
   ENDIF
 END SUB
 
-SUB NCserialOut(s AS STRING)
+SUB NCserialOut(s AS STRING, useEspPrefix AS INTEGER)
   'print to serial with LF
 
   IF SERIAL_ON.NC THEN
     ?#1,s + LF.NC;
+  ELSEIF ESP_ON.NC THEN
+    IF useEspPrefix THEN
+      ?#1, ESP_PREFIX.NC + s + LF.NC;
+    ELSE
+      ?#1,s + LF.NC;
+    ENDIF
   ENDIF
 END SUB
 
@@ -1862,7 +1957,7 @@ SUB NCesc
         ELSE
           STR.NC = ACT_PATH.NC + SEL_NAME.NC
         ENDIF
-        NCserialOut("D" + STR.NC)
+        NCserialOut("D" + STR.NC, 1)
         NCserialDir(ACTIVE.NC)
         ACT_PATH.NC = NCchangePath(ACT_PATH.NC, SEL_NAME.NC)
         NCdrawCL(ACT_PATH.NC)
@@ -1892,7 +1987,7 @@ SUB NCenter
       ELSE
         STR.NC = ACT_PATH.NC + SEL_NAME.NC
       ENDIF
-      NCserialOut("D" + STR.NC)
+      NCserialOut("D" + STR.NC, 1)
       NCserialDir(ACTIVE.NC)
       CURSOR.NC(ACTIVE.NC) = 0
       POS.NC(ACTIVE.NC) = 0
@@ -2348,7 +2443,7 @@ SUB NCfKeys(fkey AS INTEGER)
       IF LEFT$(SELECTED.NC,3)<>"D.." THEN
         IF NCisSerial(ACTIVE.NC) THEN
           IF TUIquestion("DELETE ON SERVER", "Delete '" + SEL_NAME.NC + "', really proceed?") THEN
-            NCserialOut("K" + ACT_PATH.NC + SEL_NAME.NC)
+            NCserialOut("K" + ACT_PATH.NC + SEL_NAME.NC, 1)
             NCchangeDir(ACTIVE.NC,ACT_PATH.NC)
             IF NCinsideTest(ACT_PATH.NC+SEL_NAME.NC+"/",NON_PATH.NC+SEL_NAME.NC+"/") THEN
               NCchangeDir(1-ACTIVE.NC,ACT_PATH.NC)
@@ -2398,7 +2493,7 @@ SUB NCfKeys(fkey AS INTEGER)
           END
         ENDIF
       ELSE
-        LOCAL STRING about(7) LENGTH 100
+        LOCAL STRING about(9) LENGTH 100
         about(0) = "              My name is Napoleon Commander (" + NCdigital(VERSION) + ")"
         about(1) = ""
         about(2) = "              Born on: 7. November 2020"
@@ -2407,6 +2502,12 @@ SUB NCfKeys(fkey AS INTEGER)
         about(5) = "              Mother : Unknown"
         about(6) = ""
         about(7) = "              I'm living inside of Colour Maximite 2 "
+        IF ESP_VERSION.NC <> "" THEN
+          about(8)="              and have also implanted an special organ, " + ESP_VERSION.NC
+        ENDIF
+        IF ESP_CONNECTION.NC <> "" THEN
+          about(9)=SPACE$(14) + "(" + FIELD$(ESP_CONNECTION.NC, 1, ",") + ", BSSID " + FIELD$(ESP_CONNECTION.NC, 2, ",") + ")"
+        ENDIF
         TUIinfo("ABOUT ME",about(), LOGO.NC)
       ENDIF
 
@@ -2805,8 +2906,11 @@ END SUB
 FUNCTION NCmkdir(filePath AS STRING) AS INTEGER
   'mkedir 
   IF LEFT$(filePath, 3) = "S:/" THEN
-    NCserialOut("M" + filePath)                       
-    STR.NC = NCreadUntilLF()
+    NCserialOut("M" + filePath, 1)
+    STR.NC = ""
+    DO WHILE STR.NC = ""
+      STR.NC = NCreadUntilLF()
+    LOOP
     IF STR.NC = "DONE" THEN
       NCmkdir = 0
     ELSEIF LEFT$(STR.NC,5) = "ERROR" THEN
@@ -2871,8 +2975,11 @@ SUB NCdirToServer(source AS STRING, dest AS STRING)
     ELSE
       fileLen = MM.INFO(FILESIZE item)
       '''HLPoutDebug(NCsource2dest(path, "", item) + ", " + STR$(fileLen))
-      NCserialOut("W" + NCsource2dest(path, "", item) + "|" + STR$(fileLen))
-      partData = NCreadUntilLF()
+      NCserialOut("W" + NCsource2dest(path, "", item) + "|" + STR$(fileLen), 1)
+      partData = ""
+      DO WHILE partData = ""
+        partData = NCreadUntilLF()
+      LOOP
       IF partData = "READY" THEN
         partNum = fileLen \ partLen
         partRem = fileLen MOD partLen
@@ -2907,6 +3014,7 @@ END SUB
 SUB NCkey(kk AS INTEGER)
   'main SUB for key control
   LOCAL STRING ccc
+  LOCAL INTEGER realPos
   
   SELECT CASE kk
     CASE 128  'up
@@ -2925,7 +3033,7 @@ SUB NCkey(kk AS INTEGER)
     
     CASE 129  'down
       IF CURSOR.NC(ACTIVE.NC) < MAX_ROWS.NC THEN
-        IF CURSOR.NC(ACTIVE.NC) < COUNT.NC(ACTIVE.NC) THEN
+        IF CURSOR.NC(ACTIVE.NC) + POS.NC(ACTIVE.NC) < COUNT.NC(ACTIVE.NC) THEN
           NCcursor(ACTIVE.NC,0)
           CURSOR.NC(ACTIVE.NC) = CURSOR.NC(ACTIVE.NC) + 1
           NCcursor(ACTIVE.NC,1)
@@ -2975,17 +3083,48 @@ SUB NCkey(kk AS INTEGER)
       NCcursor(ACTIVE.NC, 1)
 
     CASE 134  'HOME
-      IF CURSOR.NC(ACTIVE.NC) > 0 THEN
-        NCcursor(ACTIVE.NC, 0)
-        CURSOR.NC(ACTIVE.NC) = 0
-        NCcursor(ACTIVE.NC, 1)
+      IF ALT.NC THEN
+        NCsetCurPos(ACTIVE.NC, 0)
+        NCredrawPane(ACTIVE.NC)
+        NCcursor(ACTIVE.NC,1)
+      ELSE
+        IF CURSOR.NC(ACTIVE.NC) > 0 THEN
+          NCcursor(ACTIVE.NC, 0)
+          CURSOR.NC(ACTIVE.NC) = 0
+          NCcursor(ACTIVE.NC, 1)
+        ENDIF
       ENDIF
-      
+    
     CASE 135  'END
-      IF CURSOR.NC(ACTIVE.NC) < MIN(MAX_ROWS.NC, COUNT.NC(ACTIVE.NC)) THEN
-        NCcursor(ACTIVE.NC, 0)
-        CURSOR.NC(ACTIVE.NC) = MIN(MAX_ROWS.NC, COUNT.NC(ACTIVE.NC))
-        NCcursor(ACTIVE.NC, 1)
+      IF ALT.NC THEN
+        NCsetCurPos(ACTIVE.NC, COUNT.NC(ACTIVE.NC))
+        NCredrawPane(ACTIVE.NC)
+        NCcursor(ACTIVE.NC,1)
+      ELSE
+        IF CURSOR.NC(ACTIVE.NC) < MIN(MAX_ROWS.NC, COUNT.NC(ACTIVE.NC) - POS.NC(ACTIVE.NC)) THEN
+          NCcursor(ACTIVE.NC, 0)
+          CURSOR.NC(ACTIVE.NC) = MIN(MAX_ROWS.NC, COUNT.NC(ACTIVE.NC) - POS.NC(ACTIVE.NC))
+          NCcursor(ACTIVE.NC, 1)
+        ENDIF
+      ENDIF
+
+    CASE 136  'Page UP
+      realPos = POS.NC(ACTIVE.NC) + CURSOR.NC(ACTIVE.NC)
+      IF realPos - MAX_ROWS.NC > 0 THEN
+        INC POS.NC(ACTIVE.NC), - MAX_ROWS.NC - 1
+        DO WHILE POS.NC(ACTIVE.NC) < 0
+          INC POS.NC(ACTIVE.NC), 1
+          INC CURSOR.NC(ACTIVE.NC), -1
+        LOOP
+        NCredrawPane(ACTIVE.NC)
+        NCcursor(ACTIVE.NC,1)
+      ENDIF     
+    
+    CASE 137  'Page DOWN
+      IF POS.NC(ACTIVE.NC) + MAX_ROWS.NC + CURSOR.NC(ACTIVE.NC) < COUNT.NC(ACTIVE.NC) THEN
+        INC POS.NC(ACTIVE.NC), MAX_ROWS.NC + 1
+        NCredrawPane(ACTIVE.NC)
+        NCcursor(ACTIVE.NC,1)
       ENDIF
 
   END SELECT
@@ -3016,18 +3155,23 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
   LOCAL INTEGER strip = LEN(source) - LEN(NCgetName(source)) - 1
   LOCAL STRING dst, lineSerial
 
-  NCserialOut("T" + source)
+  NCserialOut("T" + source, 1)
 
-  lineSerial = NCreadUntilLF()
+  lineSerial = ""
+  DO WHILE lineSerial = ""
+    lineSerial = NCreadUntilLF()
+  LOOP
+
   IF LEFT$(lineSerial, 1) = "T" THEN
     cnt = VAL(MID$(lineSerial,2))
     LOCAL STRING tree(cnt)
     FOR i = 1 TO cnt
       NCserialOut("NEXT")         
-      lineSerial = NCreadUntilLF()
-      IF lineSerial <> "" THEN
-        tree(i) = lineSerial
-      ENDIF
+      lineSerial = ""
+      DO WHILE lineSerial = ""
+        lineSerial = NCreadUntilLF()
+      LOOP
+      tree(i) = lineSerial
     NEXT i
   ENDIF
   FOR i = 1 TO cnt
@@ -3046,14 +3190,18 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
 END SUB
 
 SUB NCfileFromServer(src AS STRING, dst AS STRING)
-  'copy fir from server to local
+  'copy file from server to local
 
   CONST partLen = 250
   LOCAL STRING lineSerial, partData, dialog
   LOCAL INTEGER i, fileLen, partNum, partRem, bufLen
 
-  NCserialOut("R" + src + "|" + STR$(partLen))
-  partData = NCreadUntilLF()
+  NCserialOut("R" + src + "|" + STR$(partLen), 1)
+
+  partData = ""
+  DO WHILE partData = ""
+    partData = NCreadUntilLF()
+  LOOP
   IF FIELD$(partData, 1, "|") = "READY" THEN
     fileLen = VAL(FIELD$(partData, 2, "|"))
     partNum = fileLen \ partLen
@@ -3062,6 +3210,7 @@ SUB NCfileFromServer(src AS STRING, dst AS STRING)
 
     LONGSTRING CLEAR BUFFER.NC()
     bufLen = 0
+
     NCserialOut("START")         
 
     OPEN dst FOR OUTPUT AS #2
@@ -3072,6 +3221,7 @@ SUB NCfileFromServer(src AS STRING, dst AS STRING)
         LONGSTRING CLEAR BUFFER.NC()
         bufLen = 0
       ENDIF
+      IF LOC(#1) > 0 THEN lineSerial = INPUT$(LOC(#1), #1)
       NCserialOut("NEXT")         
       TUIwaitingProgress(dialog, 100 * i / partNum)
       DO WHILE LOC(#1) < partLen: LOOP
@@ -3084,6 +3234,7 @@ SUB NCfileFromServer(src AS STRING, dst AS STRING)
       bufLen = 0
     ENDIF
     IF partRem > 0 THEN
+      IF LOC(#1) > 0 THEN lineSerial = INPUT$(LOC(#1), #1)
       NCserialOut("NEXT")         
       DO WHILE LOC(#1) < partRem: LOOP
       ?#2, INPUT$(partRem, #1);
@@ -3099,18 +3250,22 @@ FUNCTION NCserverDirInfo(filePath AS STRING) AS INTEGER
   LOCAL INTEGER bytes = 0, items = 0, i
   LOCAL STRING dst, lineSerial
 
-  NCserialOut("T" + filePath)
+  NCserialOut("T" + filePath, 1)
 
-  lineSerial = NCreadUntilLF()
+  lineSerial = ""
+  DO WHILE lineSerial = ""
+    lineSerial = NCreadUntilLF()
+  LOOP
   IF LEFT$(lineSerial, 1) = "T" THEN
     items = VAL(MID$(lineSerial,2))
     FOR i = 0 TO items - 1
       NCserialOut("NEXT")         
-      lineSerial = NCreadUntilLF()
-      IF lineSerial <> "" THEN
-        IF LEFT$(lineSerial, 1) = "F" THEN
-          INC bytes, VAL(FIELD$(lineSerial, 2, "|"))
-        ENDIF
+      lineSerial = ""
+      DO WHILE lineSerial = ""
+        lineSerial = NCreadUntilLF()
+      LOOP
+      IF LEFT$(lineSerial, 1) = "F" THEN
+        INC bytes, VAL(FIELD$(lineSerial, 2, "|"))
       ENDIF
     NEXT i
   ENDIF
