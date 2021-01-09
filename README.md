@@ -2,11 +2,27 @@
  Napoleon Commander
 
 Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2,
-you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC). 
-You need also install **pyserial** with `pip install pyserial`.
-Starting **NCserver.py** without arguments use defaults from begin of the Python script, arguments can any combination of:
+you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC).
+
+It has ability to connect to Mac/PC/Linux computer either through serial port or WiFi with help of included Python server **NCudpServer.py** or **NCserialServer.py** (here is also needed installed **pyserial** with `pip install pyserial`).
+
+Starting server without arguments use defaults from begin of the Python script, arguments can any combination of:
 ```
-NCserver.py -s <serverdir> -p <portname> -b <baudrate>
+NCudpServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
+  <serverdir>
+    base directory for NCserver, Napoleon Commander on CMM2 see just inside of this
+
+  <ip>
+    IP address of ESP on CMM2
+
+  <verbose>
+    verbose level (0=min, 3 = max)
+``` 
+`NCudpServer.py -h` for help.
+
+or for serial server:
+```
+NCserialServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
   <serverdir>
     base directory for NCserver, Napoleon Commander on CMM2 see just inside of this
 
@@ -17,12 +33,16 @@ NCserver.py -s <serverdir> -p <portname> -b <baudrate>
     speed of serial port, need to be the same as set in Napoleon Commander
     (F11, option 6 checked=691200, unchecked=230400)
 ```
-or 
-`NCserver.py -h` for help.
-
+`NCserialServer.py -h` for help.
 
 
 ### VERSION HISTORY
+#### v0.98
+	added support for PgUp and PgDown
+	ALT+Home, ALT+End jumps to total begin and end of DIR listing
+	support for NC UDP server (included) on CMM2 Deluxe *or any other with connected through serial)
+	added Arduino file for ESP8266
+
 #### v0.95
 	use LONGSTRING in serial transfer FROM SERVER, big speedup
 	(400 MHz CMM2 without WS board, 66/31 kB/s to/from server, 480 Mhz CMM2 Deluxe 66/14 kB/s, why?) 
