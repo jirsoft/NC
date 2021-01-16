@@ -11,7 +11,7 @@ OPTION BASE 0
 OPTION CRLF CR
 
 'Napoleon Commander
-CONST VERSION = "0.99"
+CONST VERSION = "1.04"
 
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
@@ -20,6 +20,7 @@ HLPinitDebug
 NCchdir NC_PATH.NC
 
 #INCLUDE "../LIB/TUI.INC"
+#INCLUDE "../LIB/GRF.INC"
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
@@ -32,10 +33,10 @@ CONST ENTER.NC = CHR$(10)
 CONST CR.NC = CHR$(13)
 CONST LF.NC = CHR$(10)
 CONST INFO.NC = "FILEINFO.TXT"
+CONST FOUND.NC = "FOUND.TXT"
 CONST SERIAL_TIMEOUT.NC = 10000
 
 CONST BUFFER_LEN.NC = 100000 
-DIM INTEGER BUFFER.NC(BUFFER_LEN.NC \ 8)
 DIM STRING SERIAL_INIT.NC = "COM3:230400,1024"
 DIM STRING SERIAL_PATH.NC = ""
 DIM INTEGER SERIAL_ON.NC = 0
@@ -114,7 +115,7 @@ DO
     CLS RGB(NOTBLACK)
     BLIT WRITE #64,VAL(FIELD$(SS.NC,1,",")),VAL(FIELD$(SS.NC,2,","))
     PAGE WRITE 0
-    HLPsaveBMP(NCnewName(ACT_PATH.NC, "ScreenShot.BMP"),VAL(FIELD$(SS.NC,1,",")),VAL(FIELD$(SS.NC,2,",")),VAL(FIELD$(SS.NC,3,",")),VAL(FIELD$(SS.NC,4,",")), 1)
+    GRF.saveBMP(NCnewName(ACT_PATH.NC, "ScreenShot.BMP"),VAL(FIELD$(SS.NC,1,",")),VAL(FIELD$(SS.NC,2,",")),VAL(FIELD$(SS.NC,3,",")),VAL(FIELD$(SS.NC,4,",")), 1)
     BLIT CLOSE #64
     SS.NC = ""
     NCchangeDir(ACTIVE.NC, ACT_PATH.NC)
@@ -143,6 +144,8 @@ DO
         NCdrawMenuPart(9)
         NCsetMenu(9, "QuitNC", 1)
         NCdrawMenuPart(10)
+        NCsetMenu(11,"Search", 1)
+        NCdrawMenuPart(12)
       ELSE
         NCsetMenu(0, "Help", 1)
         NCdrawMenuPart(1)
@@ -158,6 +161,8 @@ DO
         NCdrawMenuPart(9)
         NCsetMenu(9, "About", 1)
         NCdrawMenuPart(10)
+        NCsetMenu(11,"LP=RP", 1)
+        NCdrawMenuPart(12)
       ENDIF
     ENDIF
     KEYTEST.NC = TIMER
@@ -381,7 +386,44 @@ SUB NCgetInfo(filePath AS STRING)
         CLOSE #3
         NCviewTXT(NC_PATH.NC + INFO.NC)
       ENDIF
+    
+    CASE "GIF", "BMP", "PNG", "JPG"
+      LOCAL STRING info = GRF.getImgInfo(ACT_PATH.NC + SEL_NAME.NC)
+      IF info <> "" THEN
+        LOCAL STRING inf(3)
+        inf(0) = "Width     : " + FIELD$(info, 1, ",")
+        inf(1) = "Height    : " + FIELD$(info, 2, ",")
+        inf(2) = "Bits/pixel: " + FIELD$(info, 3, ",")
+        inf(3) = "Version   : " + FIELD$(info, 4, ",")
+        TUIinfo(ex + " IMAGE INFO", inf())
+      ELSE
+        TUIwarning("GET INFO",filePath)
+      ENDIF
 
+    CASE "HBM", "HED", "KOA", "DD", "JJ", "GG"
+      LOCAL STRING info = GRF.getC64info(ACT_PATH.NC + SEL_NAME.NC)
+      IF info <> "" THEN
+        LOCAL STRING inf(3)
+        inf(0) = "Width     : " + FIELD$(info, 1, ",")
+        inf(1) = "Height    : " + FIELD$(info, 2, ",")
+        inf(2) = "Bits/pixel: " + FIELD$(info, 3, ",")
+        inf(3) = "Version   : " + FIELD$(info, 4, ",")
+        TUIinfo("C64 IMAGE INFO", inf())
+      ELSE
+        TUIwarning("GET INFO",filePath)
+      ENDIF
+    
+    CASE "SPR"
+      LOCAL STRING info = GRF.getSPRinfo(ACT_PATH.NC + SEL_NAME.NC)
+      IF info <> "" THEN
+        LOCAL STRING inf(1)
+        inf(0) = "Width     : " + FIELD$(info, 1, ",")
+        inf(1) = "Height    : " + FIELD$(info, 2, ",")
+        TUIinfo("SPRITE INFO", inf())
+      ELSE
+        TUIwarning("GET INFO",filePath)
+      ENDIF
+    
     CASE ELSE
       TUIwarning("GET INFO",filePath)
   END SELECT
@@ -412,7 +454,9 @@ SUB NCconfig
       MODE 1,8
     ENDIF
     FONT 8
+    LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
   ENDIF
+
   IF oldSel AND 64 THEN 
     IF CFG_FastSerial.NC THEN
       SERIAL_INIT.NC = "COM3:691200,3072"
@@ -665,8 +709,8 @@ SUB NChelp
       shrt(22) = "        F9  Archive DIR tree, ALT+F9 compress FILE"
       shrt(23) = "       F10  Shows INFO box, ALT+F10 QUITs this app"
       shrt(24) = "       F11  NC Configuration"
-      shrt(25) = "       F12  Duplicates view from active to inactive pane"
-      shrt(26) = ""
+      shrt(25) = "       F12  Duplicates view from active to inactive pane, ALT+F12 searches"
+      shrt(26) = "            for item (with wildcards), shows all found, then jumps to first"
   
       TUIinfo("KEYBOARD SHORTCUTs",shrt())
       
@@ -796,10 +840,15 @@ SUB NCaction(p AS STRING, s AS STRING)
 
     CASE "PNG"
       CLS RGB(NOTBLACK)
+      ON ERROR SKIP
       LOAD PNG p+s
-      TUIwaitForNoKey
-      TUIwaitForKey
-      TUIwaitForNoKey
+      IF MM.ERRNO = 0 THEN
+        TUIwaitForNoKey
+        TUIwaitForKey
+        TUIwaitForNoKey
+      ELSE
+        TUIwarning("PNG VIEW ERROR", MM.ERRMSG$)
+      ENDIF
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -807,6 +856,7 @@ SUB NCaction(p AS STRING, s AS STRING)
 
     CASE "GIF"
       CLS RGB(NOTBLACK)
+      ON ERROR SKIP
       LOAD GIF p+s
       TUIwaitForNoKey
       TUIwaitForKey
@@ -1384,19 +1434,23 @@ SUB NCview
       'sprite view
       NCviewSPR(ACT_PATH.NC + SEL_NAME.NC)
 
-    CASE "TXT", "BAS", "BAK", "INC", "FNT", "PLY"
+    CASE "TXT", "BAS", "BAK", "INC", "FNT", "PLY", "ASC"
       'text view
       NCviewTXT(ACT_PATH.NC + SEL_NAME.NC)
 
-    CASE "BMP"
-      NCviewBMP(ACT_PATH.NC + SEL_NAME.NC)
-
-    CASE "PNG", "BMP", "JPG"
-      'image view
-      TUIwarning("IMAGE VIEW", "Viewer not available yet...")
+    CASE "BMP", "PNG", "GIF"
+      NCviewImg(ACT_PATH.NC + SEL_NAME.NC)
 
     CASE "MAR"
       NCviewMAR(ACT_PATH.NC + SEL_NAME.NC)
+
+    CASE "JPG"
+      TUIwarning("IMAGE VIEW", "JPG viewer not available yet (?)")
+
+    CASE "DD", "HED", "HBM", "GG", "JJ", "KOA"
+      'C64 graphics format
+      NCviewC64(ACT_PATH.NC + SEL_NAME.NC)
+
 
     CASE ELSE
       EXT_ERR.NC = -1
@@ -1423,102 +1477,19 @@ SUB NCview
   ENDIF
 END SUB
 
-SUB NCviewSPR(filePath AS STRING)
-  'simple sprite viewer
+SUB NCviewImg(filePath AS STRING)
+  'simple image viewer
 
-
-  ON ERROR SKIP
-  OPEN filePath FOR INPUT AS #3
-  IF MM.ERRNO = 0 THEN
-    LOCAL STRING s = "'", c
-    DO WHILE LEFT$(s, 1) = "'"
-      LINE INPUT #3, s
-    LOOP
-    LOCAL INTEGER w = VAL(FIELD$(s, 1, ",")), ww = w
-    LOCAL INTEGER x, y, cc
-    s = FIELD$(s, 3, ",")
-    LOCAL INTEGER h = VAL(s), hh, yy
-    IF h = 0 THEN h = w
-    hh = h + 16
-    LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h), ww, hh)
-
-    yy = VAL(FIELD$(dialog, 4, ",")) + 8
-    FOR y = 0 TO h - 1
-      s = "'"
-      DO WHILE LEFT$(s, 1) = "'"
-        LINE INPUT #3, s
-      LOOP
-      FOR x = 1 TO LEN(s)
-        c = MID$(s, x, 1)
-        IF c >= "0" AND c <= "7" THEN
-          cc = NCgetCMMcolor(ASC(c) - 48)
-          PIXEL (MM.HRES \ 2) - (w \ 2) + x - 1, yy + y, cc
-        ENDIF
-      NEXT x 
-    NEXT y
-    CLOSE #3
-
-    TUIwaitForNoKey
-    TUIwaitForKey
-    TUIwaitForNoKey
-    TUIemptyOFF(dialog)
-  ENDIF
-END SUB
-
-FUNCTION NCgetCMMcolor(n AS INTEGER) AS INTEGER
-  NCgetCMMcolor = RGB(NOTBLACK)
-  SELECT CASE n
-    CASE 0
-      NCgetCMMcolor = RGB(NOTBLACK)
-
-    CASE 1
-      NCgetCMMcolor = RGB(BLUE)
-
-    CASE 2
-      NCgetCMMcolor = RGB(GREEN)
-
-    CASE 3
-      NCgetCMMcolor = RGB(CYAN)
-
-    CASE 4
-      NCgetCMMcolor = RGB(RED)
-
-    CASE 5
-      NCgetCMMcolor = RGB(PURPLE)
-
-    CASE 6
-      NCgetCMMcolor = RGB(YELLOW)
-
-    CASE 7
-      NCgetCMMcolor = RGB(WHITE)
-
-  END SELECT 
-END FUNCTION
-
-SUB NCviewBMP(filePath AS STRING)
-  'simple BMP viewer
-
-  LOCAL STRING b
-  LOCAL INTEGER w, h, bpp, nw, nh, ww, hh, yy
-  LOCAL INTEGER mw = MM.HRES - 32, mh = MM.VRES - 64
-  OPEN filePath FOR INPUT AS #3
-  b = INPUT$(2, #3)
-  SELECT CASE b
-    CASE "BM"
-      b = INPUT$(16, #3)
-      b = INPUT$(4, #3)
-      w = ABS(STR2BIN(INT32, b))
-      b = INPUT$(4, #3)
-      h = ABS(STR2BIN(INT32, b))
-      b = INPUT$(2, #3)
-      b = INPUT$(2, #3)
-      bpp = STR2BIN(UINT16, b)
-      CLOSE #3
-      
-      PAGE WRITE 1
-      LOAD BMP filePath
-      PAGE WRITE 0
-      nw = w:nh = h
+  LOCAL STRING inf = GRF.getImgInfo(filePath)
+  IF inf <> "" THEN
+    LOCAL INTEGER w = VAL(FIELD$(inf, 1, ","))
+    LOCAL INTEGER h = VAL(FIELD$(inf, 2, ","))
+    LOCAL INTEGER bpp = VAL(FIELD$(inf, 3, ","))
+    
+    IF w < = MM.HRES AND h <= MM.VRES THEN
+      LOCAL INTEGER nw = w, nh = h, ww = w, hh = h
+      LOCAL INTEGER mw = MM.HRES - 32, mh = MM.VRES - 64
+  
       IF nw > mw THEN
         nw = mw
         nh = nh*mw/w
@@ -1529,17 +1500,26 @@ SUB NCviewBMP(filePath AS STRING)
       ENDIF
       hh = nh
       ww = nw
-
+  
       LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", ww, hh)
-      yy = VAL(FIELD$(dialog, 4, ",")) + 4
+      LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4
+      TEXT MM.HRES \ 2, MM.VRES \ 2, "Please" ,"CB",,, RGB(NOTBLACK), BC.TUI
+      TEXT MM.HRES \ 2, MM.VRES \ 2, "wait" ,"CT",,, RGB(NOTBLACK), BC.TUI
 
-      IMAGE RESIZE 0, 0, w, h, (MM.HRES - nw) \ 2, yy, nw, nh, 1
+      IF GRF.loadImg(filePath, 0, 0, 1) THEN
+        IMAGE RESIZE_FAST 0, 0, w, h, (MM.HRES - nw) \ 2, yy, nw, nh, 1
+      ENDIF
 
-  END SELECT
-  TUIwaitForNoKey
-  TUIwaitForKey
-  TUIwaitForNoKey
-  TUIemptyOFF(dialog)
+      TUIwaitForNoKey
+      TUIwaitForKey
+      TUIwaitForNoKey
+      TUIemptyOFF(dialog)
+    ELSE
+      TUIwarning("IMAGE VIEWER", "Image is too big (" + STR$(w) + "x" + STR$(h) + ")")
+    ENDIF
+  ELSE
+    TUIwarning("IMAGE VIEWER", "Image can't be decoded")
+  ENDIF
 END SUB
 
 FUNCTION NCprepareLogo(f AS STRING) AS INTEGER
@@ -1568,6 +1548,7 @@ FUNCTION NCprepareLogo(f AS STRING) AS INTEGER
     LOOP
     INC h
     CLOSE #5
+    IF LOGO.NC = 63 THEN BLIT CLOSE #63
     BLIT READ #63, 0, 0, w, h
     PAGE WRITE 0
 
@@ -1952,7 +1933,6 @@ SUB NCinit
   ENDIF
 
   INIT.NC = 1
-  LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
 
   NCconfigLoad
   IF CFG_HighColor.NC THEN
@@ -1961,6 +1941,7 @@ SUB NCinit
     MODE 1,8
   ENDIF
 
+  LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
 
   CURSOR.NC(0) = 0
   CURSOR.NC(1) = 0       'left and right cursor
@@ -2602,8 +2583,13 @@ SUB NCfKeys(fkey AS INTEGER)
       NCconfig
 
     CASE 156  'F12
-      NCchangeDir(1-ACTIVE.NC,ACT_PATH.NC)        
-      NCredrawPane(1-ACTIVE.NC)
+      IF ALT.NC THEN
+        'search
+        NCsearch
+      ELSE
+        NCchangeDir(1-ACTIVE.NC,ACT_PATH.NC)        
+        NCredrawPane(1-ACTIVE.NC)
+      ENDIF
 
   END SELECT
 END SUB
@@ -3217,26 +3203,6 @@ SUB NCkey(kk AS INTEGER)
   END SELECT
 END SUB
 
-SUB HLPsaveBMP(filePath AS STRING, xx AS INTEGER, yy AS INTEGER, ww AS INTEGER, hh AS INTEGER, pp AS INTEGER)
-  LOCAL INTEGER x, y, c
-  LOCAL STRING dialog = TUIwaitingON("SAVING '" + NCgetName(filePath) + "'")
-
-  OPEN filePath FOR OUTPUT AS #5
-  ?#5, "BM"BIN2STR$(UINT32, 54 + ww * hh * 3)BIN2STR$(UINT32, 0)BIN2STR$(UINT32, 54);
-  ?#5, BIN2STR$(UINT32, 40)BIN2STR$(INT32, ww)BIN2STR$(INT32, hh)BIN2STR$(UINT16, 1);
-  ?#5, BIN2STR$(UINT16, 24)BIN2STR$(INT32, 0)BIN2STR$(INT32, 0)BIN2STR$(INT32, 0)BIN2STR$(INT32, 0);
-  ?#5, BIN2STR$(INT32, 0)BIN2STR$(INT32, 0);
-  FOR y = hh - 1 TO 0 STEP -1
-    TUIwaitingProgress(dialog, 100 * (hh - y) / hh)
-    FOR x = 0 TO ww - 1 
-      c = PIXEL(xx + x, yy + y, pp)
-      ?#5, CHR$(c AND &hFF)CHR$((c >> 8) AND &hFF)CHR$((c >> 16) AND &hFF);
-    NEXT x
-  NEXT y
-  CLOSE #5
-  TUIwaitingOFF(dialog)
-END SUB
-
 SUB NCdirFromServer(source AS STRING, dest AS STRING)
   LOCAL INTEGER i, cnt
   LOCAL INTEGER strip = LEN(source) - LEN(NCgetName(source)) - 1
@@ -3282,6 +3248,7 @@ SUB NCfileFromServer(src AS STRING, dst AS STRING)
   CONST partLen = 250
   LOCAL STRING lineSerial, partData, dialog
   LOCAL INTEGER i, fileLen, partNum, partRem, bufLen
+  LOCAL INTEGER BUFFER.NC(BUFFER_LEN.NC \ 8)
 
   NCserialOut("R" + src + "|" + STR$(partLen), 1)
 
@@ -3441,3 +3408,178 @@ SUB NCeditHEX(filePath AS STRING)
   NCdrawMenu
 END SUB
 
+SUB NCviewC64(filePath AS STRING)
+  'simple C64 image format viewer
+  'HBM, HED, DD, KOA, missing DD, GG
+  
+  LOCAL STRING info = GRF.getC64info(ACT_PATH.NC + SEL_NAME.NC)
+  IF info <> "" THEN
+    LOCAL INTEGER w = VAL(FIELD$(info, 1, ","))
+    LOCAL INTEGER h = VAL(FIELD$(info, 2, ","))
+    LOCAL INTEGER bpp = VAL(FIELD$(info, 3, ","))
+    
+    LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", w, h)
+    LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
+
+    TEXT MM.HRES \ 2, MM.VRES \ 2, "Please" ,"CB",,, RGB(NOTBLACK), BC.TUI
+    TEXT MM.HRES \ 2, MM.VRES \ 2, "wait" ,"CT",,, RGB(NOTBLACK), BC.TUI
+    IF GRF.loadC64(filePath, 0, 0, 1) THEN   
+      BLIT 0, 0, (MM.HRES - w) \ 2, yy, w, h, 1
+    ELSE
+      TEXT MM.HRES \ 2, MM.VRES \ 2, "Loading" ,"CB",,, RGB(NOTBLACK), BC.TUI
+      TEXT MM.HRES \ 2, MM.VRES \ 2, "error!" ,"CT",,, RGB(NOTBLACK), BC.TUI
+    ENDIF
+    TUIwaitForNoKey
+    TUIwaitForKey
+    TUIwaitForNoKey
+    TUIemptyOFF(dialog)
+  ELSE
+    TUIwarning("C64 IMAGE VIEWER", "Image can't be decoded")
+  ENDIF
+END SUB
+
+SUB NCviewSPR(filePath AS STRING)
+  'simple sprite viewer
+  
+  LOCAL STRING info = GRF.getSPRinfo(ACT_PATH.NC + SEL_NAME.NC)
+  IF info <> "" THEN
+    LOCAL INTEGER w = VAL(FIELD$(info, 1, ","))
+    LOCAL INTEGER h = VAL(FIELD$(info, 2, ","))
+    
+    LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h), w, h)
+    LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
+
+    PAGE WRITE 1
+    CLS BC.TUI
+    PAGE WRITE 0
+    IF GRF.loadSPR(filePath, 0, 0, 1) THEN   
+      BLIT 0, 0, (MM.HRES - w) \ 2, yy, w, h, 1
+      TUIwaitForNoKey
+      TUIwaitForKey
+      TUIwaitForNoKey
+    ENDIF
+    TUIemptyOFF(dialog)
+  ENDIF
+END SUB
+
+SUB NCsearch
+  'search for FILE or DIR
+
+  LOCAL STRING find = TUIinput("SEARCH FOR FILE/DIR", "Search what", "", FILECHARS.NC + "*?")
+  LOCAL INTEGER firstFlag = 1
+  LOCAL STRING firstItem = "", firstPath = ""
+
+  IF find <> "" THEN
+    LOCAL STRING dialog = TUIwaitingON("SEARCHING FOR '" + find + "'")
+    ON ERROR SKIP
+    OPEN NC_PATH.NC + FOUND.NC FOR OUTPUT AS #3
+    IF MM.ERRNO = 0 THEN
+      ?#3,"SEARCH for '" + find + "'"
+      ?#3
+      ?#3,"Found:"
+
+      IF NCisSerial(ACTIVE.NC) THEN
+      ELSE
+        LOCAL INTEGER ind = 0, size, i
+        LOCAL STRING item, path
+        LOCAL STRING pth(MAX_ITEMS.NC)
+
+        pth(ind) = LEFT$(ACT_PATH.NC, LEN(ACT_PATH.NC) - 1)
+        DO WHILE ind >= 0
+          NCchdir pth(ind)
+          path = pth(ind)
+          ind = ind - 1
+          item = DIR$("", ALL)
+          DO WHILE item <> ""
+            size = MM.INFO(FILESIZE item)
+            IF size<0 THEN
+              'directory
+              ind = ind + 1
+              pth(ind) = path + "/" + item                
+              IF NCequal(find, item) THEN
+                ? #3, pth(ind) + "/"
+                IF firstFlag THEN
+                  firstFlag = 0
+                  firstItem = item + "/"
+                  firstPath = path
+                ENDIF
+              ENDIF
+            ELSE
+              IF NCequal(find, item) THEN
+                ? #3, path + "/" + item
+                IF firstFlag THEN
+                  firstFlag = 0
+                  firstItem = item
+                  firstPath = path
+                ENDIF
+              ENDIF
+            ENDIF
+            item = DIR$()
+          LOOP
+        LOOP
+      ENDIF
+      CLOSE #3
+      TUIwaitingOFF(dialog)
+      NCviewTXT(NC_PATH.NC + FOUND.NC)
+      IF NOT firstFlag THEN
+        NCchangeDir(ACTIVE.NC, firstPath + "/")
+        IF RIGHT$(firstItem, 1) = "/" THEN firstItem = LEFT$(firstItem, LEN(firstItem) - 1)
+        FOR i = 0 TO COUNT.NC(ACTIVE.NC)
+          IF LCASE$(MID$(FIELD$(ITEM.NC(ACTIVE.NC, i), 1, "|"), 2)) = LCASE$(firstItem) THEN
+            NCsetCurPos(ACTIVE.NC, i)
+            EXIT FOR
+          ENDIF
+        NEXT i
+        NCcursor(ACTIVE.NC, 1)
+      ENDIF
+    ENDIF
+  ENDIF
+END SUB
+
+FUNCTION NCequal(wild AS STRING, name AS STRING) AS INTEGER
+  LOCAL STRING pat = UCASE$(wild), stri = UCASE$(name)
+  LOCAL STRING locp = "", locs = ""
+  LOCAL INTEGER two = INSTR(pat, "**")
+  
+  DO WHILE two > 0
+    pat = LEFT$(pat, two) + MID$(pat, two + 2)
+    two = INSTR(pat, "**")
+  LOOP
+  DO WHILE pat <> ""
+    IF pat = stri THEN
+      NCequal = 1
+      EXIT FUNCTION
+    ENDIF
+    IF LEFT$(pat, 1) <> LEFT$(stri, 1) AND LEFT$(pat, 1) <> "?" AND LEFT$(pat, 1) <> "*" THEN
+      NCequal = 0
+      EXIT FUNCTION
+    ENDIF
+    IF LEFT$(pat, 1) = "*" THEN
+      pat = MID$(pat, 2)
+      IF pat = "" THEN
+        NCequal = 1
+        EXIT FUNCTION
+      ENDIF
+      two = INSTR(stri, LEFT$(pat, 1))
+      IF two = 0 THEN
+        NCequal = 0
+        EXIT FUNCTION
+      ENDIF
+      stri = MID$(stri, two + 1)
+      IF INSTR(stri, LEFT$(pat, 1)) = 0 THEN
+        pat = MID$(pat, 2)
+      ELSE
+        pat = "*" + pat
+      ENDIF
+    ELSE
+      IF LEFT$(pat, 1) = LEFT$(stri, 1) OR LEFT$(pat, 1) = "?" THEN
+        pat = MID$(pat, 2)
+        stri = MID$(stri, 2)
+      ELSE
+        NCequal = 0
+        EXIT FUNCTION
+      ENDIF
+    ENDIF
+  LOOP
+  NCequal = (pat = stri)
+END FUNCTION

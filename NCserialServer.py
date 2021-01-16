@@ -30,7 +30,7 @@ MODE = 0
 
 
 def convert_date(timestamp):
-    d = datetime.utcfromtimestamp(timestamp)
+    d = datetime.fromtimestamp(timestamp)
     formated_date = d.strftime('%y-%m-%d %H:%M')
     return formated_date
 
