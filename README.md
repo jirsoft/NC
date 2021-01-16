@@ -37,6 +37,13 @@ NCserialServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
 
 
 ### VERSION HISTORY
+#### v0.99
+	changed ICN for to SPR (standard sprite file)
+	added simple sprite viewer
+	modifcation of BMP viewer
+	version file check
+	refactoring
+
 #### v0.98
 	added support for PgUp and PgDown
 	ALT+Home, ALT+End jumps to total begin and end of DIR listing
