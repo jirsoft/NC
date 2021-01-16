@@ -2,7 +2,7 @@
  Napoleon Commander
 
 Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2,
-you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC).
+you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC) and [GRF.INC](https://github.com/jirsoft/GRF/blob/master/GRF.INC).
 
 It has ability to connect to Mac/PC/Linux computer either through serial port or WiFi with help of included Python server **NCudpServer.py** or **NCserialServer.py** (here is also needed installed **pyserial** with `pip install pyserial`).
 
@@ -37,6 +37,15 @@ NCserialServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
 
 
 ### VERSION HISTORY
+#### v1.04
+	added SEARCH to ALT+F12 (inclusive wildcards '?' and '*'), lists all found FILEs and DIRs, then jumps to first one
+	added GRF.INC library (link in description), now just with few functions:
+		screenshot saves BMP either in 8bpp or 16bpp (smaller files)
+		preview of GIF, BMP and PNG in window and size + bpp informations
+		preview of some C64 picure files:  HiEddie (.hed), Doodle (.dd), Koala (.koa), HIRES (.hbm)
+		preview of SPRITE file
+	bugfixes in TUI.INC
+	
 #### v0.99
 	changed ICN for to SPR (standard sprite file)
 	added simple sprite viewer
