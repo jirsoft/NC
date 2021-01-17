@@ -1,4 +1,5 @@
 #include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
@@ -7,7 +8,7 @@
 #include <Time.h>
 #include <TimeLib.h>
 
-const String ESPversion = "0.33";
+const String ESPversion = "0.38";
 
 char serByte;
 char serMode = 0; // 0 = command mode, 1 = file mode
@@ -522,7 +523,7 @@ void loop() {
     else if (serCommand.substring(0, 8).equalsIgnoreCase("connect(") && serCommand.endsWith(")"))
     {
       String ssid = serCommand.substring(8, serCommand.length() - 1);
-      int pos = ssid.lastIndexOf(",");
+      int pos = ssid.indexOf(",");
       if (pos >= 0)
       {
         String pass = ssid.substring(pos + 1);
@@ -546,6 +547,42 @@ void loop() {
       }
     }
     
+    else if ((WiFi.status() == WL_CONNECTED) && serCommand.substring(0, 8).equalsIgnoreCase("httpget(") && serCommand.endsWith(")"))
+    {
+      int split = 250;
+      WiFiClient client;
+      HTTPClient http;
+      String url = serCommand.substring(8, serCommand.length() - 1);
+      int pos = url.indexOf('|');
+      if (pos >= 0)
+      {
+        split = url.substring(pos + 1).toInt();
+        url.remove(pos);
+      }
+      if (!url.startsWith("http"))
+        url = "http://" + url;
+
+      http.begin(url.c_str());
+      int httpResponseCode = http.GET();
+      if (httpResponseCode > 0) 
+      {
+        String payload = http.getString();
+        int lines = payload.length() / split;
+        if (payload.length() % split)
+          lines++;
+        serOut("HTTPGET " + url + '|' + String(lines));
+        for(int i = 0; i <  payload.length(); i += split)
+        {
+          if ((i + split) < payload.length())
+            serOut(payload.substring(i, i + split));
+          else
+            serOut(payload.substring(i));
+        }
+      }
+      else
+        serOut("Error code: " + String(httpResponseCode));
+    }
+
     else if (serCommand == "reboot")
     {
       serOut("Rebooting...");
