@@ -18,11 +18,11 @@
 
  The cursor also selects the ACTIVE ITEM. A RED cursor indicates a HIDDEN file which begins with
  the period character '.'  Hidden files and folders can be toggled between SHOWN/HIDDEN using
- upper-case 'H' and status is indicated on the bottom left of the screen
+ CTRL+H and status is indicated on the bottom left of the screen.
 
- Normally pane items are shown SORTED but this can be switched off using upper-case 'U' with
- status again indicated on the bottom left. Display of DIRs before FILEs, or vice versa, can be
- set in the CONFIGURATION file.
+ Normally pane items are shown SORTED but this can be switched off using CTRL+U with status again
+ indicated on the bottom left. Display of DIRs before FILEs, or vice versa, can be set in the
+ CONFIGURATION file.
  
  2. ACTIVE ITEM
 
@@ -40,7 +40,7 @@
   COPY   Copies files or folders to a new directory. When both panes contain the same directory,  
          the copied item must be named differently. App "AI" can propose a new name for you.
 
-  MOVE   Same as COPY, but source item is deleted.
+  MOVE   Same as COPY, but source item is later deleted.
 
   DELETE Deletes the file or folder; the folder doesn't have to be empty. VERY DANGEROUS ACTION!!!
 
@@ -55,7 +55,8 @@
              future (using SUB CALL) external viewers could be called based on the file extension.
              Viewer isn't limited by file size (except by speed) but doesn't work on directories.
 
-  EDITOR     Extension of the VIEWER, not done (yet?).
+  HEX EDIT   Like HEX viewer, use either HEX mumber or ALT+character to replace one under cursor.
+             Changes are after pressing ENTER immediately writen to file!!! 
 
   MAKE DIR   Create new folder in active directory.
   
@@ -63,23 +64,24 @@
   
   COMPRESS   Compress file into .ARC file (RLE or HUFFMAN compression), decompress with ENTER
   
-  SCREENSHOT Function (PRINT SCREEN) works strangely because of the IMAGE SAVE limitation.
-             After the key-press the 'shot' is stored to memory, then later saved to disk.
+  SCREENSHOT Function (PRINT SCREEN) works 'strange', because of the IMAGE SAVE limitation.
+             After the key-press the 'shot' is stored to memory (lighting effect), then later saved
+             to disk.
              Pressing LEFT ALT+PRINT SCREEN can 'shoot' just an open dialog window.
- 
- 
  Some settings can be changed with F11 (CONFIGURATION). They are stored in the CFG file and loaded
  on program start. Try them out:
- 	
- 	External viewers enabled            F3 calls EXTviewXXX for extension XXX (VIEWER.INC)
- 	External actions enabled            ENTER calls EXTactionXXX for extension XXX (ACTION.INC)
- 	ESC to parent directory             ESC works the same as ENTER on '..' i.e. GO UP a level.
- 	DIRs before FILEs                   View of list as used by MS WINDOWS.
- 	TEXT VIEWER fallback (BIN else)     If selected, F3 for unknown extension starts TXT viewer.
- 	HIGH COLOR mode                     NC runs in extended colours of MODE 1,16 (standard is 1,8).
- 	FAST SERIAL SERVER            	    Communication at 691200 baud instead of 230400.
+  
+  External viewers enabled            F3 calls EXTviewXXX for extension XXX (VIEWER.INC)
+  External actions enabled            ENTER calls EXTactionXXX for extension XXX (ACTION.INC)
+  ESC to parent directory             ESC works the same as ENTER on '..' i.e. GO UP a level
+  DIRs before FILEs                   View of list as used by MS WINDOWS
+  TEXT VIEWER fallback (HEX else)     If selected, F3 for unknown extension starts TXT viewer
+  HIGH COLOR mode                     NC runs in 65k colours (MODE 1,16) instead of 256 (MODE 1,8)
+  FAST SERIAL SERVER                  Communication at 691200 baud instead of 230400
+  ESP8266 installed                   In CMM2 is installed WiFi module and shoul be used
 
- F10 will quit the App.
+
+ F10 shows ABOUT dialog (incl. ESP + WiFi info), ALT+F10 will quit the App.
 
                                                                                 Enjoy it!
                                                                                 JirSoft@JirSoft.eu 

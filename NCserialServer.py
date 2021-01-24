@@ -149,13 +149,13 @@ while True:
 		
 			#local -> server
 			elif ch[0] == 'W':
-				fileName = BASEDIR + CURDIR + ch.split('|')[0][1:]
+				fileName = BASEDIR + ch.split('|')[0][4:]
 				fileLen = int(ch.split('|')[1])
 				remain = fileLen
 				buffer = bytes()
 				MODE = 1
 				ser.write('READY\n'.encode('ASCII'))
-				out('WRITE FILE ' + BASEDIR + ch.split('|')[0][1:] + ', [' + str(fileLen) + ' bytes]')
+				out('WRITE FILE ' + fileName + ', [' + str(fileLen) + ' bytes]')
 				copyTime = time.perf_counter()
 		
 			#server -> local

@@ -2,7 +2,7 @@
 #Napoleon Server
 #Simple server for CMM2  Napoleon Commander over network
 #JirSoft, 2020
-VER = 'v0.14'
+VER = 'v0.16'
 
 import socket
 from datetime import datetime
@@ -36,6 +36,8 @@ VERB_LEVEL = 2
 LF = '\n'
 CURDIR = ""
 MODE = 0
+ACT_COMMAND = ''
+NC_FOUND = 0
 
 def out(s, level):
 	if VERB_LEVEL > level:
@@ -74,7 +76,7 @@ def lifeTest():
 def writeFile(d):
 	global MODE, copyTime, remain, buffer, fileLen, fileName
 	
-	fileName = BASEDIR + CURDIR + d.split('|')[0][1:]
+	fileName = BASEDIR + d.split('|')[0][4:]
 	fileLen = int(d.split('|')[1])
 	out('LOCAL to SERVER ' + fileName + ', [' + str(fileLen) + ' bytes]', 0)
 	remain = fileLen
@@ -291,7 +293,7 @@ if __name__ == "__main__":
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-sock.settimeout(5)
+sock.settimeout(10)
 sock.bind((ncIP, ncPort))
 
 udpOut("NCudpServer")
@@ -309,6 +311,7 @@ while (True):
 	
 					#ESP on CMM2 found NCudpServer
 					if sData == 'NConCMM2':
+						NC_FOUND = 1
 						out('Napoleon Commander found NCudpServer', -1)
 						sock.settimeout(None)
 				
@@ -318,39 +321,56 @@ while (True):
 
 					#life test
 					elif sData[0] == '?':
+						ACT_COMMAND = 'LIFE TEST'
 						lifeTest()
+						ACT_COMMAND = ''
 		
 					#local -> server
 					elif sData[0] == 'W':
+						ACT_COMMAND = 'WRITE DATA'
 						writeFile(sData)
 
 					#server -> local
 					elif sData[0] == 'R':
+						ACT_COMMAND = 'READ DATA'
 						readFile(sData)
+						ACT_COMMAND = ''
 
 					#server -> server
 					elif sData[0] == 'C':
+						ACT_COMMAND = 'COPY ITEM'
 						copyItem(sData)
+						ACT_COMMAND = ''
 
 					#list directory
 					elif sData[0] == 'D':
+						ACT_COMMAND = 'LIST DIR'
 						listDir(sData)
+						ACT_COMMAND = ''
 
 					#traverse directory
 					elif sData[0] == 'T':
+						ACT_COMMAND = 'TRAVERSE DIR'
 						traverseDir(sData)
+						ACT_COMMAND = ''
 
 					#server MKDIR
 					elif sData[0] == 'M':
+						ACT_COMMAND = 'MAKE DIR'
 						makeDir(sData)
+						ACT_COMMAND = ''
 
 					#server RENAME
 					elif sData[0] == 'N':
+						ACT_COMMAND = 'RENAME ITEM'
 						renameItem(sData)
+						ACT_COMMAND = ''
 
 					#server KILL or RMDIR (include subdirs)
 					elif sData[0] == 'K':
+						ACT_COMMAND = 'KILL ITEM'
 						killItem(sData)
+						ACT_COMMAND = ''
 		
 				else:
 					udpOut("NCudpServer")
@@ -365,8 +385,19 @@ while (True):
 					newFile = open(fileName, "wb")
 					newFile.write(buffer)
 					newFile.close
-					MODE = 0	
+					MODE = 0
+					ACT_COMMAND = ''	
 					out('DONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(fileLen/copyTime/1024,1)) + ' kB/s)', 0)
 
 	except socket.timeout:
-		udpOut("NCudpServer")
+		if ACT_COMMAND == '':
+			if not NC_FOUND:
+				out("Looking for NC...", -1)
+				udpOut("NCudpServer")
+			
+		else:
+			out("NCudpServer timeout in '" + ACT_COMMAND + "'", -1)			
+			if ACT_COMMAND == 'WRITE DATA':
+				out("WRITE DATA canceled", -1)
+				MODE = 0
+				ACT_COMMAND = ''
