@@ -37,6 +37,16 @@ NCserialServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
 
 
 ### VERSION HISTORY
+#### v1.11
+	finally finished basic HEX editor on F4 key, it can just overwrite, not to make file longer or shorter
+	modified MANUAL.TXT to comply with changes
+	new icons for WiFi, HIDDEN items and SORT in left bottom corner, keys changed to CTRL+H and CTRL+H
+	clock in right bottom corner
+	WiFi functions on ALT+F12 (searh moved to more standard CTRL+F):
+		enabled just when ESP8266 module switched ON in CONFIG (key 7) and present (tested)
+		first time needed SSID and PASSWORD to network, later stored into NC.CFG file
+	bugfixes
+
 #### v1.04
 	added SEARCH to ALT+F12 (inclusive wildcards '?' and '*'), lists all found FILEs and DIRs, then jumps to first one
 	added GRF.INC library (link in description), now just with few functions:
