@@ -3,9 +3,12 @@
 
 '#MMDEBUG ON
 OPTION BREAK 0
+DBG OPTION BREAK 3
+
 
 'Napoleon Commander
-CONST VERSION.NC = "1.11"
+CONST VERSION.NC = "1.12"
+
 
 CONST MIN_VERSION.NC = 5.06
 
@@ -21,8 +24,10 @@ DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
 HLPinitDebug
 NCchdir NC_PATH.NC
 
-#INCLUDE "../LIB/TUI.INC"
-#INCLUDE "../LIB/GRF.INC"
+'#INCLUDE "../LIB/TUI.INC"
+'#INCLUDE "../LIB/GRF.INC"
+#INCLUDE "TUI.INC"
+#INCLUDE "GRF.INC"
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
@@ -1611,7 +1616,7 @@ SUB NCview
       'sprite view
       NCviewSPR(ACT_PATH.NC + SEL_NAME.NC)
 
-    CASE "TXT", "BAS", "BAK", "INC", "FNT", "PLY", "ASC", "CFG"
+    CASE "TXT", "BAS", "BAK", "INC", "FNT", "PLY", "ASC", "CFG", "PY", "MD", "CSV"
       'text view
       NCviewTXT(ACT_PATH.NC + SEL_NAME.NC)
 
@@ -2172,6 +2177,7 @@ SUB NCinit
   NCsetMenu(11,"LP=RP", 1)
  
   NCdrawMenu
+
   SETTICK 1000, NCclock
 END SUB
 
@@ -2605,7 +2611,9 @@ SUB NCfKeys(fkey AS INTEGER)
           ENDIF
         ENDIF
       ELSE
-        NCeditHEX(ACT_PATH.NC + SEL_NAME.NC)
+        IF NOT NCisDir(SELECTED.NC) AND NOT NCisSerial(ACTIVE.NC) THEN
+          NCeditHEX(ACT_PATH.NC + SEL_NAME.NC)
+        ENDIF
       ENDIF
 
     CASE 149  'F5
@@ -3849,6 +3857,7 @@ SUB NCeditHEX(filePath AS STRING)
           'Page DOWN
           IF (po + 16*EDIT_ROWS.NC) <= si  THEN 
             po = po + 16*EDIT_ROWS.NC
+            digPos = 0
             change = 1
           ENDIF
 
@@ -3856,6 +3865,7 @@ SUB NCeditHEX(filePath AS STRING)
           'LEFT
           IF cursX > 0  THEN 
             INC cursX, -1
+            digPos = 0
             change = 1
           ENDIF
 
@@ -3863,6 +3873,7 @@ SUB NCeditHEX(filePath AS STRING)
           'RIGHT
           IF cursX < cursLN(cursY)  THEN 
             INC cursX, 1
+            digPos = 0
             change = 1
           ENDIF
 
@@ -3870,11 +3881,13 @@ SUB NCeditHEX(filePath AS STRING)
           'UP
           IF cursY > 0  THEN
             INC cursY, -1
+            digPos = 0
             change = 1
           ELSE
             IF po > 0 THEN 
               po = MAX(po - 16*EDIT_ROWS.NC, 0)
               cursY = EDIT_ROWS.NC
+              digPos = 0
               change = 1
             ENDIF
           ENDIF
@@ -3884,10 +3897,12 @@ SUB NCeditHEX(filePath AS STRING)
           IF cursY < maxRow  THEN 
             INC cursY, 1
             cursX = MIN(cursLN(cursY), cursX)
+            digPos = 0
             change = 1
           ELSE
             IF (po + 16*EDIT_ROWS.NC) <= si  THEN 
               po = po + 16*EDIT_ROWS.NC
+              digPos = 0
               cursY = 0        
               change = 1
             ENDIF
@@ -3903,6 +3918,7 @@ SUB NCeditHEX(filePath AS STRING)
             ELSE
               TEXT 640 + cursX*8, firstRow + (cursY << 4), ".","LT", 8,, rCol, nCol
             ENDIF
+            digPos = 0
           ELSE
             digit = ASC(UCASE$(k)) - 48
             IF digit > 9 THEN INC digit, -7
@@ -3929,6 +3945,7 @@ SUB NCeditHEX(filePath AS STRING)
             ?#3, CHR$(edNum);
             preNum = edNum
           ENDIF
+          digPos = 0
           change = 1
 
       END SELECT
@@ -3940,5 +3957,4 @@ SUB NCeditHEX(filePath AS STRING)
   NCcursor(ACTIVE.NC,1)
   NCdrawMenu
 END SUB
-
 
