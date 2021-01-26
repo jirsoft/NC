@@ -1,8 +1,7 @@
 # NC
  Napoleon Commander
 
-Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2,
-you need also [TUI.INC](https://github.com/jirsoft/TUI/blob/master/TUI.INC) and [GRF.INC](https://github.com/jirsoft/GRF/blob/master/GRF.INC).
+Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2.
 
 It has ability to connect to Mac/PC/Linux computer either through serial port or WiFi with help of included Python server **NCudpServer.py** or **NCserialServer.py** (here is also needed installed **pyserial** with `pip install pyserial`).
 
@@ -37,7 +36,7 @@ NCserialServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
 
 
 ### VERSION HISTORY
-#### v1.11
+#### v1.12
 	finally finished basic HEX editor on F4 key, it can just overwrite, not to make file longer or shorter
 	modified MANUAL.TXT to comply with changes
 	new icons for WiFi, HIDDEN items and SORT in left bottom corner, keys changed to CTRL+H and CTRL+H
