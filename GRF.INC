@@ -1,5 +1,5 @@
 'Graphic library
-CONST VERSION.GRF = "0.06"
+CONST VERSION.GRF = "0.10"
 
 'FUNCTION GRF.info(pg AS INTEGER) AS STRING
   'return MODE, BPP, y-lines, pg address, write address
@@ -19,8 +19,9 @@ CONST VERSION.GRF = "0.06"
 'FUNCTION GRF.getC64info(filePath AS STRING) AS STRING
   'get info for some C64 formats
 
-'FUNCTION GRF.loadC64(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER) AS INTEGER
+'FUNCTION GRF.loadC64(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
   'load some C64 formats to x, y, page
+  'prog = 1 -> show progress
   'returns 0 when NOK
 
 'FUNCTION GRF.getZXinfo(filePath AS STRING) AS STRING
@@ -29,9 +30,26 @@ CONST VERSION.GRF = "0.06"
 'FUNCTION GRF.getCMMcolor(n AS INTEGER) AS INTEGER
   'get color from standard CMM (for sprites)
 
-'FUNCTION GRF.loadZX(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER) AS INTEGER
+'FUNCTION GRF.loadZX(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
   'load some ZX Spectrum formats to x, y, page
+  'prog = 1 -> show progress
   'returns 0 when NOK
+
+'FUNCTION GRF.getSTinfo(filePath AS STRING) AS STRING
+  'get info for some Atari ST formats
+
+'FUNCTION GRF.loadST(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
+  'load some Atari ST formats to x, y, page
+  'prog = 1 -> show progress
+  'returns 0 when NOK
+
+'FUNCTION GRF.loadSPR(filePath AS STRING, xx AS INTEGER, yy AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
+  'simple sprite viewer to x, y, page
+  'prog = 1 -> show progress
+
+'FUNCTION GRF.getSPRinfo(filePath AS STRING) AS STRING
+  'get info for sprite
+
 
 
 FUNCTION GRF.info(pg AS INTEGER) AS STRING
@@ -253,52 +271,73 @@ FUNCTION GRF.getImgInfo(filePath AS STRING) AS STRING
   END IF
 END FUNCTION
 
-FUNCTION GRF.loadImg(filePath AS STRING, xx AS INTEGER, yy AS INTEGER, pg AS INTEGER) AS INTEGER
+FUNCTION GRF.loadImg(filePath AS STRING, xx AS INTEGER, yy AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
   'load image to x, y, page
   'returns 0 when NOK
 
   GRF.loadImg = 1
   SELECT CASE UCASE$(RIGHT$(filePath, 4))
     CASE ".BMP"
+      IF prog THEN
+        LOCAL STRING dialog = TUIwaitingON("BMP LOADER")
+      ENDIF
       PAGE WRITE pg
       ON ERROR SKIP
       LOAD BMP filePath, xx, yy
       IF MM.ERRNO > 0 THEN GRF.loadImg = 0
       PAGE WRITE 0
-      IF NOT GRF.loadImg THEN
-        TEXT MM.HRES \2 , MM.VRES \2, "Unsupported BMP format", "CM" ,8 ,,RGB(RED), BC.TUI
+      IF prog THEN
+        TUIwaitingOFF(dialog)
       ENDIF
+      IF NOT GRF.loadImg THEN TUIwarning("BMP LOADER", "Unsupported BMP format")
+
     CASE ".GIF"
       IF FIELD$(GRF.getImgInfo(filePath), 4, ",") = "GIF89a" THEN
+        IF prog THEN
+          LOCAL STRING dialog = TUIwaitingON("GIF LOADER")
+        ENDIF
         PAGE WRITE pg
+        ON ERROR SKIP
         LOAD GIF filePath, xx, yy
+        IF MM.ERRNO > 0 THEN GRF.loadImg = 0
         PAGE WRITE 0
+        IF prog THEN
+          TUIwaitingOFF(dialog)
+        ENDIF
+        IF NOT GRF.loadImg THEN TUIwarning("GIF LOADER", "Unsupported GIF format")
       ELSE
-        TEXT MM.HRES \2 , MM.VRES \2, "GIF87a not supported", "CM" ,8 ,,RGB(RED), BC.TUI
+        TUIwarning("GIF LOADER", "GIF87a not supported")
         GRF.loadImg = 0
       ENDIF
 
     CASE ".PNG"
+      IF prog THEN
+        LOCAL STRING dialog = TUIwaitingON("PNG LOADER")
+      ENDIF
       PAGE WRITE pg
       ON ERROR SKIP
       LOAD PNG filePath, xx, yy
       IF MM.ERRNO > 0 THEN GRF.loadImg = 0
       PAGE WRITE 0
-      IF NOT GRF.loadImg THEN
-        TEXT MM.HRES \2 , MM.VRES \2, "Unsupported PNG format", "CM" ,8 ,,RGB(RED), BC.TUI
+      IF prog THEN
+        TUIwaitingOFF(dialog)
       ENDIF
+      IF NOT GRF.loadImg THEN TUIwarning("PNG LOADER", "Unsupported PNG format")
 
     CASE ".JPG"
+      IF prog THEN
+        LOCAL STRING dialog = TUIwaitingON("JPG LOADER")
+      ENDIF
       PAGE WRITE pg
       ON ERROR SKIP
       LOAD JPG filePath, xx, yy
       PAGE WRITE 0
       IF MM.ERRNO > 0 THEN GRF.loadImg = 0
       PAGE WRITE 0
-      IF NOT GRF.loadImg THEN
-        TEXT MM.HRES \2 , MM.VRES \2, "Unsupported JPG format", "CM" ,8 ,,RGB(RED), BC.TUI
-        GRF.loadImg = 0
+      IF prog THEN
+        TUIwaitingOFF(dialog)
       ENDIF
+      IF NOT GRF.loadImg THEN TUIwarning("JPG LOADER", "Unsupported JPG format")
 
   END SELECT
 END FUNCTION
@@ -334,8 +373,9 @@ FUNCTION GRF.getC64info(filePath AS STRING) AS STRING
   END SELECT
 END FUNCTION
 
-FUNCTION GRF.loadC64(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER) AS INTEGER
+FUNCTION GRF.loadC64(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
   'load some C64 formats to x, y, page
+  'prog = 1 -> show progress
   'returns 0 when NOK
 
   LOCAL INTEGER cols(15) = (&h000000, &hFFFFFF, &h880000, &hAAFFEE, &hCC44CC, &h00CC55, &h0000AA, &hEEEE77, &hDD8855, &h664400, &hFF7777, &h333333, &h777777, &hAAFF66, &h0088FF, &hBBBBBB)
@@ -347,6 +387,9 @@ FUNCTION GRF.loadC64(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEG
   cols(0) = RGB(NOTBLACK)
   backCol = cols(0)
 
+  IF prog THEN
+    LOCAL STRING dialog = TUIwaitingON("C64 IMAGE LOADER")
+  ENDIF
   PAGE WRITE pg
   LOCAL STRING ext = UCASE$(RIGHT$(filePath, 4))
   DO WHILE INSTR(ext, ".")
@@ -431,6 +474,11 @@ FUNCTION GRF.loadC64(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEG
       scr = 8
       col = 8
       FOR yy = 0 TO 199 STEP 8
+        IF prog THEN
+          PAGE WRITE 0
+          TUIwaitingProgress(dialog, 100*yy/199)
+          PAGE WRITE pg
+        ENDIF
         FOR xx = 0 TO 319 STEP 8
           'ss = LGETBYTE(scrRAM(), scr)
           ss = PEEK(VAR scrRAM(), scr)
@@ -470,6 +518,11 @@ FUNCTION GRF.loadC64(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEG
       bmp = 8
       scr = 8
       FOR yy = 0 TO 199 STEP 8
+        IF prog THEN
+          PAGE WRITE 0
+          TUIwaitingProgress(dialog, 100*yy/199)
+          PAGE WRITE pg
+        ENDIF
         FOR xx = 0 TO 319 STEP 8
           ss = PEEK(VAR scrRAM(), scr)
           INC scr
@@ -489,9 +542,14 @@ FUNCTION GRF.loadC64(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEG
     ENDIF
   ENDIF
   PAGE WRITE 0
+  IF prog THEN
+    TUIwaitingOFF(dialog)
+  ENDIF
 END FUNCTION
 
 FUNCTION GRF.getSPRinfo(filePath AS STRING) AS STRING
+  'get info for sprite
+
   GRF.getSPRinfo = ""
 
   ON ERROR SKIP
@@ -510,13 +568,17 @@ FUNCTION GRF.getSPRinfo(filePath AS STRING) AS STRING
   ENDIF
 END FUNCTION
 
-FUNCTION GRF.loadSPR(filePath AS STRING, xx AS INTEGER, yy AS INTEGER, pg AS INTEGER) AS INTEGER
-  'simple sprite viewer
+FUNCTION GRF.loadSPR(filePath AS STRING, xx AS INTEGER, yy AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
+  'simple sprite viewer to x, y, page
+  'prog = 1 -> show progress
 
   GRF.loadSPR = 0
   ON ERROR SKIP
   OPEN filePath FOR INPUT AS #3
   IF MM.ERRNO = 0 THEN
+    IF prog THEN
+      LOCAL STRING dialog = TUIwaitingON("SPRITE LOADER")
+    ENDIF
     PAGE WRITE pg
     LOCAL STRING s = "'", c
     DO WHILE LEFT$(s, 1) = "'"
@@ -529,6 +591,11 @@ FUNCTION GRF.loadSPR(filePath AS STRING, xx AS INTEGER, yy AS INTEGER, pg AS INT
     IF h = 0 THEN h = w
 
     FOR y = 0 TO h - 1
+      IF prog THEN
+        PAGE WRITE 0
+        TUIwaitingProgress(dialog, 100*y/h)
+        PAGE WRITE pg
+      ENDIF
       s = "'"
       DO WHILE LEFT$(s, 1) = "'"
         LINE INPUT #3, s
@@ -543,6 +610,9 @@ FUNCTION GRF.loadSPR(filePath AS STRING, xx AS INTEGER, yy AS INTEGER, pg AS INT
     NEXT y
     CLOSE #3
     PAGE WRITE 0
+    IF prog THEN
+      TUIwaitingOFF(dialog)
+    ENDIF
     GRF.loadSPR = 1
   ENDIF
 END FUNCTION
@@ -568,7 +638,7 @@ FUNCTION GRF.getCMMcolor(n AS INTEGER) AS INTEGER
       GRF.getCMMcolor = RGB(RED)
 
     CASE 5
-      GRF.getCMMcolor = RGB(PURPLE)
+      GRF.getCMMcolor = RGB(MAGENTA)
 
     CASE 6
       GRF.getCMMcolor = RGB(YELLOW)
@@ -598,8 +668,9 @@ FUNCTION GRF.getZXinfo(filePath AS STRING) AS STRING
   END SELECT
 END FUNCTION
 
-FUNCTION GRF.loadZX(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER) AS INTEGER
+FUNCTION GRF.loadZX(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
   'load some ZX Spectrum formats to x, y, page
+  'prog = 1 -> show progress
   'returns 0 when NOK
 
   LOCAL INTEGER cols(15) = (&h000000, &h0000D7, &hD70000, &hD700D7, &h00D700, &h00D7D7, &hD7D700, &hD7D7D7, &h000000, &h0000FF, &hFF0000, &hFF00FF, &h00FF00, &h00FFFF, &hFFFF00, &hFFFFFF)
@@ -611,6 +682,9 @@ FUNCTION GRF.loadZX(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
   cols(0) = RGB(NOTBLACK)
   cols(8) = cols(0)
 
+  IF prog THEN
+    LOCAL STRING dialog = TUIwaitingON("ZX Spectrum IMAGE LOADER")
+  ENDIF
   PAGE WRITE pg
   LOCAL STRING ext = UCASE$(RIGHT$(filePath, 4))
   DO WHILE INSTR(ext, ".")
@@ -650,6 +724,11 @@ FUNCTION GRF.loadZX(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
     FOR third = 0 TO 3
       FOR yy = 0 TO 7
         FOR yyy = 0 TO 56 STEP 8
+          IF prog THEN
+            PAGE WRITE 0
+            TUIwaitingProgress(dialog, 100*third*yy*yyy/3/7/56)
+            PAGE WRITE pg
+          ENDIF
           FOR xx = 0 TO 248 STEP 8
             bb = PEEK(VAR bitmap(), bmp)
             INC bmp
@@ -675,4 +754,404 @@ FUNCTION GRF.loadZX(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
     NEXT third
   ENDIF
   PAGE WRITE 0
+  IF prog THEN
+     TUIwaitingOFF(dialog)
+  ENDIF
 END FUNCTION
+
+FUNCTION GRF.getSTinfo(filePath AS STRING) AS STRING
+  'get info for some Atari ST formats
+
+  LOCAL STRING ext = UCASE$(RIGHT$(filePath, 4))
+  DO WHILE INSTR(ext, ".")
+    ext = MID$(ext, 2)
+  LOOP
+  SELECT CASE ext
+    CASE "PI1"
+      GRF.getSTinfo = "320,200,4,DEGAS low"
+
+    CASE "PC1"
+      GRF.getSTinfo = "320,200,4,DEGAS low PackBits"
+
+    CASE "PI2"
+      GRF.getSTinfo = "640,200,2,DEGAS mid"
+
+    CASE "PC2"
+      GRF.getSTinfo = "640,200,2,DEGAS mid PackBits"
+
+    CASE "PI3"
+      GRF.getSTinfo = "640,400,1,DEGAS high"
+
+    CASE "PC3"
+      GRF.getSTinfo = "640,400,1,DEGAS high PackBits"
+
+    CASE ELSE
+      GRF.getSTinfo = ""      
+  END SELECT
+END FUNCTION
+
+FUNCTION GRF.loadST(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGER, prog AS INTEGER) AS INTEGER
+  'load some Atari ST formats to x, y, page
+  'prog = 1 -> show progress
+  'returns 0 when NOK
+
+  LOCAL INTEGER cols(15), fc, bc
+  LOCAL INTEGER bitmap(4100), size
+  LOCAL INTEGER xx, yy, pp, bb, xxx, bb1, bb2, bb3, bb4
+  LOCAL STRING inp
+  GRF.loadST = 0      
+
+  IF prog THEN
+    LOCAL STRING dialog = TUIwaitingON("Atari ST IMAGE LOADER")
+  ENDIF
+  PAGE WRITE pg
+  LOCAL STRING ext = UCASE$(RIGHT$(filePath, 4))
+  DO WHILE INSTR(ext, ".")
+    ext = MID$(ext, 2)
+  LOOP
+  SELECT CASE ext
+    CASE "PI3"
+      OPEN filePath FOR INPUT AS #5
+      inp = INPUT$(2, #5)
+      IF STR2BIN(UINT16, inp, BIG) = 2 THEN
+        LONGSTRING CLEAR bitmap()
+        inp = INPUT$(32, #5)
+        FOR xx = 1 TO 200
+          LONGSTRING APPEND bitmap(), INPUT$(160, #5)    
+        NEXT xx
+        CLOSE #5
+        bb = STR2BIN(UINT16, LEFT$(inp, 2), BIG)
+        IF bb AND 1 THEN
+          bc = RGB(WHITE)
+          fc = RGB(NOTBLACK)
+        ELSE
+          fc = RGB(WHITE)
+          bc = RGB(NOTBLACK)
+        ENDIF
+        BOX 0, 0, 640, 400, 0, bc, bc
+        pp = 1
+        FOR yy = 0 TO 399
+          IF prog THEN
+            PAGE WRITE 0
+            TUIwaitingProgress(dialog, 100*yy/399)
+            PAGE WRITE pg
+          ENDIF
+          FOR xx = 0 TO 640 - 16 STEP 16
+            bb = STR2BIN(UINT16, LGETSTR$(bitmap(), pp, 2), BIG)
+            INC pp, 2
+            FOR xxx = 0 TO 15
+              IF bb AND (1 << xxx) THEN
+                PIXEL x + xx + (15 - xxx), y + yy, fc
+              ENDIF
+            NEXT xxx
+          NEXT xx            
+        NEXT yy
+        GRF.loadST = 1
+      ENDIF
+
+    CASE "PI2"
+      OPEN filePath FOR INPUT AS #5
+      inp = INPUT$(2, #5)
+      IF STR2BIN(UINT16, inp, BIG) = 1 THEN
+        LONGSTRING CLEAR bitmap()
+        inp = INPUT$(32, #5)
+        FOR xx = 0 TO 3
+          bb = STR2BIN(UINT16, MID$(inp, 2*xx + 1, 2), BIG)
+          fc = (bb AND 15) << 2
+          pp = fc
+          bb = bb >> 4
+          fc = (bb AND 15) << 3
+          pp = pp + (fc << 5)
+          bb = bb >> 4
+          fc = (bb AND 15) << 2
+          pp = pp + (fc << 11)
+          cols(xx) = pp
+        NEXT xx
+        FOR xx = 1 TO 200
+          LONGSTRING APPEND bitmap(), INPUT$(160, #5)    
+        NEXT xx
+        CLOSE #5
+        bc = RGB(NOTBLACK)
+        BOX 0, 0, 640, 200, 0, bc, bc
+        pp = 1
+        FOR yy = 0 TO 199
+          IF prog THEN
+            PAGE WRITE 0
+            TUIwaitingProgress(dialog, 100*yy/199)
+            PAGE WRITE pg
+          ENDIF
+          FOR xx = 0 TO 640 - 16 STEP 16
+            bb1 = STR2BIN(UINT16, LGETSTR$(bitmap(), pp, 2), BIG)
+            INC pp, 2
+            bb2 = STR2BIN(UINT16, LGETSTR$(bitmap(), pp, 2), BIG)
+            INC pp, 2
+            FOR xxx = 0 TO 15
+              bb = (bb1 AND 1) OR ((bb2 AND 1) << 1)
+              PIXEL x + xx + 7 - xxx, y + yy, cols(bb)
+              bb1 = bb1 >> 1
+              bb2 = bb2 >> 1
+            NEXT xxx
+          NEXT xx            
+        NEXT yy
+        GRF.loadST = 1
+      ENDIF
+
+    CASE "PI1"
+      OPEN filePath FOR INPUT AS #5
+      inp = INPUT$(2, #5)
+      IF STR2BIN(UINT16, inp, BIG) = 0 THEN
+        LONGSTRING CLEAR bitmap()
+        inp = INPUT$(32, #5)
+        FOR xx = 0 TO 15
+          bb = STR2BIN(UINT16, MID$(inp, 2*xx + 1, 2), BIG)
+          fc = (bb AND 15) << 2
+          pp = fc
+          bb = bb >> 4
+          fc = (bb AND 15) << 3
+          pp = pp + (fc << 5)
+          bb = bb >> 4
+          fc = (bb AND 15) << 2
+          pp = pp + (fc << 11)
+          cols(xx) = pp
+          IF pp = 0 THEN cols(xx) = RGB(NOTBLACK)
+        NEXT xx
+        FOR xx = 1 TO 200
+          LONGSTRING APPEND bitmap(), INPUT$(160, #5)    
+        NEXT xx
+        CLOSE #5
+        bc = RGB(NOTBLACK)
+        BOX 0, 0, 320, 200, 0, bc, bc
+        pp = 1
+        FOR yy = 0 TO 199
+          IF prog THEN
+            PAGE WRITE 0
+            TUIwaitingProgress(dialog, 100*yy/199)
+            PAGE WRITE pg
+          ENDIF
+          FOR xx = 0 TO 320 - 16 STEP 16
+            bb1 = STR2BIN(UINT16, LGETSTR$(bitmap(), pp, 2), BIG)
+            INC pp, 2
+            bb2 = STR2BIN(UINT16, LGETSTR$(bitmap(), pp, 2), BIG)
+            INC pp, 2
+            bb3 = STR2BIN(UINT16, LGETSTR$(bitmap(), pp, 2), BIG)
+            INC pp, 2
+            bb4 = STR2BIN(UINT16, LGETSTR$(bitmap(), pp, 2), BIG)
+            INC pp, 2
+            FOR xxx = 0 TO 15
+              bb = (bb1 AND 1) OR ((bb2 AND 1) << 1) OR ((bb3 AND 1) << 2) OR ((bb4 AND 1) << 3)
+              PIXEL x + xx + 15 - xxx, y + yy, cols(bb)
+              bb1 = bb1 >> 1
+              bb2 = bb2 >> 1
+              bb3 = bb3 >> 1
+              bb4 = bb4 >> 1
+            NEXT xxx
+          NEXT xx            
+        NEXT yy
+        GRF.loadST = 1
+      ENDIF
+
+    CASE "PC1"
+      OPEN filePath FOR INPUT AS #5
+      size = LOF(#5)
+      inp = INPUT$(2, #5)
+      IF STR2BIN(UINT16, inp, BIG) = &h8000 THEN
+        inp = INPUT$(32, #5)
+        FOR xx = 0 TO 15
+          bb = STR2BIN(UINT16, MID$(inp, 2*xx + 1, 2), BIG)
+          fc = (bb AND 15) << 2
+          pp = fc
+          bb = bb >> 4
+          fc = (bb AND 15) << 3
+          pp = pp + (fc << 5)
+          bb = bb >> 4
+          fc = (bb AND 15) << 2
+          pp = pp + (fc << 11)
+          cols(xx) = pp
+          IF pp = 0 THEN cols(xx) = RGB(NOTBLACK)
+        NEXT xx
+        
+        LOCAL STRING ln(3)
+        LOCAL INTEGER pl = 0, i
+        yy = 0
+        pp = 1
+        xx = 0
+        bc = RGB(NOTBLACK)
+        BOX 0, 0, 320, 200, 0, bc, bc
+        DO WHILE pp < size
+          bb = ASC(INPUT$(1, #5))
+          INC pp
+          IF bb < 128 THEN
+            CAT ln(pl), INPUT$(bb + 1, #5)
+            INC pp, bb + 1
+          ELSE
+            CAT ln(pl), STRING$(257 - bb, INPUT$(1, #5))
+            INC pp
+          ENDIF
+          IF LEN(ln(pl)) > 39 THEN
+            IF pl = 3 THEN
+              IF prog THEN
+                PAGE WRITE 0
+                TUIwaitingProgress(dialog, 100*yy/199)
+                PAGE WRITE pg
+              ENDIF
+              FOR i = 1 TO 40
+                bb1 = ASC(MID$(ln(0), i, 1))
+                bb2 = ASC(MID$(ln(1), i, 1))
+                bb3 = ASC(MID$(ln(2), i, 1))
+                bb4 = ASC(MID$(ln(3), i, 1))
+                FOR xxx = 0 TO 7
+                  bb = (bb1 AND 1) OR ((bb2 AND 1) << 1) OR ((bb3 AND 1) << 2) OR ((bb4 AND 1) << 3)
+                  PIXEL x + xx + 7 - xxx, y + yy, cols(bb)
+                  bb1 = bb1 >> 1
+                  bb2 = bb2 >> 1
+                  bb3 = bb3 >> 1
+                  bb4 = bb4 >> 1
+                NEXT xxx
+                INC xx, 8
+              NEXT i
+              xx = 0
+              INC yy
+              ln(0) = ""
+              ln(1) = ""
+              ln(2) = ""
+              ln(3) = ""
+            ENDIF
+            pl = (pl + 1) MOD 4
+          ENDIF
+        LOOP 
+        CLOSE #5
+
+        GRF.loadST = 1
+      ENDIF
+
+    CASE "PC3"
+      OPEN filePath FOR INPUT AS #5
+      size = LOF(#5)
+      inp = INPUT$(2, #5)
+      IF STR2BIN(UINT16, inp, BIG) = &h8002 THEN
+        LONGSTRING CLEAR bitmap()
+        inp = INPUT$(32, #5)
+        pp = 1
+        DO WHILE pp < size
+          bb = ASC(INPUT$(1, #5))
+          INC pp
+          IF bb < 128 THEN
+            LONGSTRING APPEND bitmap(), INPUT$(bb + 1, #5)
+            INC pp, bb + 1
+          ELSE
+            LONGSTRING APPEND bitmap(), STRING$(257 - bb, INPUT$(1, #5))
+            INC pp
+          ENDIF
+          IF prog THEN
+            PAGE WRITE 0
+            TUIwaitingProgress(dialog, 50*pp/size)
+            PAGE WRITE pg
+          ENDIF
+        LOOP 
+        CLOSE #5
+        HLPoutDebug(STR$(LLEN(bitmap())))
+        bb = STR2BIN(UINT16, LEFT$(inp, 2), BIG)
+        IF bb AND 1 THEN
+          bc = RGB(WHITE)
+          fc = RGB(NOTBLACK)
+        ELSE
+          fc = RGB(WHITE)
+          bc = RGB(NOTBLACK)
+        ENDIF
+        BOX 0, 0, 640, 400, 0, bc, bc
+        pp = 1
+        FOR yy = 0 TO 399
+          IF prog THEN
+            PAGE WRITE 0
+            TUIwaitingProgress(dialog, 50 + 50*yy/399)
+            PAGE WRITE pg
+          ENDIF
+          FOR xx = 0 TO 640 - 16 STEP 16
+            bb = STR2BIN(UINT16, LGETSTR$(bitmap(), pp, 2), BIG)
+            INC pp, 2
+            FOR xxx = 0 TO 15
+              IF bb AND (1 << xxx) THEN
+                PIXEL x + xx + (15 - xxx), y + yy, fc
+              ENDIF
+            NEXT xxx
+          NEXT xx            
+        NEXT yy
+        GRF.loadST = 1
+      ENDIF
+
+    CASE "PC2"
+      OPEN filePath FOR INPUT AS #5
+      size = LOF(#5)
+      inp = INPUT$(2, #5)
+      IF STR2BIN(UINT16, inp, BIG) = &h8001 THEN
+        inp = INPUT$(32, #5)
+        FOR xx = 0 TO 3
+          bb = STR2BIN(UINT16, MID$(inp, 2*xx + 1, 2), BIG)
+          fc = (bb AND 15) << 2
+          pp = fc
+          bb = bb >> 4
+          fc = (bb AND 15) << 3
+          pp = pp + (fc << 5)
+          bb = bb >> 4
+          fc = (bb AND 15) << 2
+          pp = pp + (fc << 11)
+          cols(xx) = pp
+          IF pp = 0 THEN cols(xx) = RGB(NOTBLACK)
+        NEXT xx
+        
+        LOCAL STRING ln(1)
+        LOCAL INTEGER pl = 0, i
+        yy = 0
+        pp = 1
+        xx = 0
+        bc = RGB(NOTBLACK)
+        BOX 0, 0, 640, 200, 0, bc, bc
+        DO WHILE pp < size
+          bb = ASC(INPUT$(1, #5))
+          INC pp
+          IF bb < 128 THEN
+            CAT ln(pl), INPUT$(bb + 1, #5)
+            INC pp, bb + 1
+          ELSE
+            CAT ln(pl), STRING$(257 - bb, INPUT$(1, #5))
+            INC pp
+          ENDIF
+          IF LEN(ln(pl)) > 79 THEN
+            IF pl = 1 THEN
+              IF prog THEN
+                PAGE WRITE 0
+                TUIwaitingProgress(dialog, 100*yy/199)
+                PAGE WRITE pg
+              ENDIF
+              FOR i = 1 TO 80
+                bb1 = ASC(MID$(ln(0), i, 1))
+                bb2 = ASC(MID$(ln(1), i, 1))
+                FOR xxx = 0 TO 7
+                  bb = (bb1 AND 1) OR ((bb2 AND 1) << 1)
+                  PIXEL x + xx + 7 - xxx, y + yy, cols(bb)
+                  bb1 = bb1 >> 1
+                  bb2 = bb2 >> 1
+                NEXT xxx
+                INC xx, 8
+              NEXT i
+              xx = 0
+              INC yy
+              ln(0) = ""
+              ln(1) = ""
+            ENDIF
+            pl = (pl + 1) MOD 2
+          ENDIF
+        LOOP 
+        CLOSE #5
+
+        GRF.loadST = 1
+      ENDIF
+
+  END SELECT
+  PAGE WRITE 0
+  IF prog THEN
+     TUIwaitingOFF(dialog)
+  ENDIF
+END FUNCTION
+
+

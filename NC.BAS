@@ -7,7 +7,7 @@ DBG OPTION BREAK 3
 
 
 'Napoleon Commander
-CONST VERSION.NC = "1.12"
+CONST VERSION.NC = "1.13"
 
 
 CONST MIN_VERSION.NC = 5.06
@@ -21,7 +21,7 @@ OPTION CRLF CR
 DIM INTEGER INIT.NC = 0
 DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
 
-HLPinitDebug
+NCinitDebug
 NCchdir NC_PATH.NC
 
 '#INCLUDE "../LIB/TUI.INC"
@@ -483,6 +483,19 @@ SUB NCgetInfo(filePath AS STRING)
         TUIwarning("GET INFO",filePath)
       ENDIF
     
+    CASE "PI1", "PI2", "PI3", "PC1", "PC2", "PC3"
+      LOCAL STRING info = GRF.getSTinfo(ACT_PATH.NC + SEL_NAME.NC)
+      IF info <> "" THEN
+        LOCAL STRING inf(3)
+        inf(0) = "Width     : " + FIELD$(info, 1, ",")
+        inf(1) = "Height    : " + FIELD$(info, 2, ",")
+        inf(2) = "Bits/pixel: " + FIELD$(info, 3, ",")
+        inf(3) = "Version   : " + FIELD$(info, 4, ",")
+        TUIinfo("Atari ST IMAGE INFO", inf())
+      ELSE
+        TUIwarning("GET INFO",filePath)
+      ENDIF
+    
     CASE "SPR"
       LOCAL STRING info = GRF.getSPRinfo(ACT_PATH.NC + SEL_NAME.NC)
       IF info <> "" THEN
@@ -848,7 +861,7 @@ SUB NChelp
       shrt(10) = "CTRL+h      Switches hidden items ON/OFF (" + CHR$(230) + " shown when hidden ON)"
       shrt(11) = "CTRL+u      Unsorted/sorted directory layout (" + CHR$(229) + " shown when sorted)"
       shrt(12) = "CTRL+f      Finds item (wildcards enabled), shows all found, then jumps to first"
-      shrt(13) = "PrintScr    Saves screen to 'ScreenShot.BMP', with ALT just current dialog"
+      shrt(13) = "PrintScr    Saves screen to 'ScreenShot.BMP', with ALT just current dialog (not to S:)"
       shrt(14) = ""
       shrt(15) = "        F1  Displays HELP screen(s)"
       shrt(16) = "        F2  Gets size for DIR, info for FILE"
@@ -1634,6 +1647,10 @@ SUB NCview
       'ZX Spectrum graphics format
       NCviewZX(ACT_PATH.NC + SEL_NAME.NC)
 
+    CASE "PI1", "PI2", "PI3", "PC1", "PC2", "PC3"
+      'Atari ST graphics format
+      NCviewST(ACT_PATH.NC + SEL_NAME.NC)
+
     CASE ELSE
       EXT_ERR.NC = -1
       IF CFG_ExtView.NC THEN
@@ -1681,21 +1698,17 @@ SUB NCviewImg(filePath AS STRING)
         nh = mh
       ENDIF
       hh = nh
-      ww = nw
-  
-      LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", ww, hh)
-      LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4
-      TEXT MM.HRES \ 2, MM.VRES \ 2, "Please" ,"CB",,, RGB(NOTBLACK), BC.TUI
-      TEXT MM.HRES \ 2, MM.VRES \ 2, "wait" ,"CT",,, RGB(NOTBLACK), BC.TUI
+      ww = nw  
 
-      IF GRF.loadImg(filePath, 0, 0, 1) THEN
+      IF GRF.loadImg(filePath, 0, 0, 1, 1) THEN
+        LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", ww, hh)
+        LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4
         IMAGE RESIZE_FAST 0, 0, w, h, (MM.HRES - nw) \ 2, yy, nw, nh, 1
+        TUIwaitForNoKey
+        TUIwaitForKey
+        TUIwaitForNoKey
+        TUIemptyOFF(dialog)
       ENDIF
-
-      TUIwaitForNoKey
-      TUIwaitForKey
-      TUIwaitForNoKey
-      TUIemptyOFF(dialog)
     ELSE
       TUIwarning("IMAGE VIEWER", "Image is too big (" + STR$(w) + "x" + STR$(h) + ")")
     ENDIF
@@ -1770,14 +1783,14 @@ SUB NCchdir(path AS STRING)
   CHDIR path
 END SUB
 
-SUB HLPinitDebug
+SUB NCinitDebug
   'erase debug file
 
   OPEN NC_PATH.NC + "DEBUG.TXT" FOR OUTPUT AS #6
   CLOSE #6
 END SUB
 
-SUB HLPoutDebug(s AS STRING)
+SUB NCoutDebug(s AS STRING)
   'append to debug file
 
   DBG OPEN NC_PATH.NC + "DEBUG.TXT" FOR APPEND AS #6
@@ -1958,7 +1971,7 @@ SUB NCfileToServer(source AS STRING, dest AS STRING, dir AS INTEGER)
   LOCAL STRING partData, dialog
   LOCAL INTEGER partNum, partRem, fileLen = MM.INFO(FILESIZE source), i, bufLen
 
-  HLPoutDebug("NCfileToServer " + source + "," + dest + "," + STR$(dir))
+  'NCoutDebug("NCfileToServer " + source + "," + dest + "," + STR$(dir))
   'NCserialOut("W" + NCgetName(source) + "|" + STR$(fileLen), 1)
   NCserialOut("W" + dest + "|" + STR$(fileLen), 1)
 
@@ -2771,7 +2784,7 @@ SUB NCfKeys(fkey AS INTEGER)
           END
         ENDIF
       ELSE
-        LOCAL STRING about(9) LENGTH 100
+        LOCAL STRING about(10) LENGTH 100
         LOCAL STRING myVer = STR$(MM.INFO(VERSION), 1, 2) + "." + RIGHT$(STR$(MM.INFO(VERSION) * 10000, 5, 0),2)
         LOCAL STRING myCMM2 = MM.DEVICE$ + " (" + LEFT$(STR$(MM.INFO(CPUSPEED)), 3) + "MHz), v" + myVer
         about(0) = "              My name is Napoleon Commander (" + NCdigital(VERSION.NC) + ")"
@@ -2780,13 +2793,14 @@ SUB NCfKeys(fkey AS INTEGER)
         about(3) = "              Where  : Czech Republic"
         about(4) = "              Father : " + CHR$(157) + "JirSoft"
         about(5) = "              Mother : Unknown"
-        about(6) = ""
-        about(7) = "              I'm living inside of " + myCMM2
+        about(6) = "              Sisters: TUI.INC v" + VERSION.TUI + ", GRF.INC v" + VERSION.GRF
+        about(7) = ""
+        about(8) = "I'm living inside of " + myCMM2
         IF ESP_VERSION.NC <> "" THEN
-          about(8)="              and have also implanted an special organ, " + ESP_VERSION.NC
+          about(9)="and have also implanted an special organ, " + ESP_VERSION.NC
         ENDIF
         IF WIFI.NC THEN
-          about(9)=SPACE$(14) + "(" + FIELD$(ESP_CONNECTION.NC, 1, ",") + ", BSSID " + FIELD$(ESP_CONNECTION.NC, 2, ",") + ")"
+          about(10)= "(connected to " + FIELD$(ESP_CONNECTION.NC, 1, ",") + ", BSSID " + FIELD$(ESP_CONNECTION.NC, 2, ",") + ")"
         ENDIF
         TUIinfo("ABOUT ME",about(), LOGO.NC)
       ENDIF
@@ -3260,7 +3274,7 @@ SUB NCdirToServer(source AS STRING, dest AS STRING)
       NULL_I.NC = NCmkdir(NCsource2dest(path, dest, item))
     ELSE
       hlp = NCsource2dest(path, dest, item)
-      HLPoutDebug("NCdirToServer " + item + "," + hlp + ",1")
+      'NCoutDebug("NCdirToServer " + item + "," + hlp + ",1")
       NCfileToServer(item, hlp, 1)
       
 '      fileLen = MM.INFO(FILESIZE item)
@@ -3550,27 +3564,23 @@ SUB NCviewC64(filePath AS STRING)
     LOCAL INTEGER h = VAL(FIELD$(info, 2, ","))
     LOCAL INTEGER bpp = VAL(FIELD$(info, 3, ","))
     
-    LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", w, h, " S = Save to BMP ")
-    LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
-
-    TEXT MM.HRES \ 2, MM.VRES \ 2, "Please" ,"CB",,, RGB(NOTBLACK), BC.TUI
-    TEXT MM.HRES \ 2, MM.VRES \ 2, "wait" ,"CT",,, RGB(NOTBLACK), BC.TUI
-    IF GRF.loadC64(filePath, 0, 0, 1) THEN   
+    IF GRF.loadC64(filePath, 0, 0, 1, 1) THEN
+      LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", w, h, " S = Save to BMP ")
+      LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
       BLIT 0, 0, (MM.HRES - w) \ 2, yy, w, h, 1
+      TUIwaitForNoKey
+      DO WHILE k = ""
+        k = INKEY$
+      LOOP        
+      TUIwaitForNoKey
+      TUIemptyOFF(dialog)
+      IF UCASE$(k) = "S" THEN
+        GRF.saveBMP(NCgetNoExtension(filePath) + ".BMP", 0, 0, w, h, 1)
+        NCchangeDir(ACTIVE.NC, ACT_PATH.NC)
+        NCcursor(ACTIVE.NC, 1)
+      ENDIF
     ELSE
-      TEXT MM.HRES \ 2, MM.VRES \ 2, "Loading" ,"CB",,, RGB(NOTBLACK), BC.TUI
-      TEXT MM.HRES \ 2, MM.VRES \ 2, "error!" ,"CT",,, RGB(NOTBLACK), BC.TUI
-    ENDIF
-    TUIwaitForNoKey
-    DO WHILE k = ""
-      k = INKEY$
-    LOOP        
-    TUIwaitForNoKey
-    TUIemptyOFF(dialog)
-    IF UCASE$(k) = "S" THEN
-      GRF.saveBMP(NCgetNoExtension(filePath) + ".BMP", 0, 0, w, h, 1)
-      NCchangeDir(ACTIVE.NC, ACT_PATH.NC)
-      NCcursor(ACTIVE.NC, 1)
+      TUIwarning("C64 IMAGE VIEWER", "Loading error")
     ENDIF
   ELSE
     TUIwarning("C64 IMAGE VIEWER", "Image can't be decoded")
@@ -3585,19 +3595,19 @@ SUB NCviewSPR(filePath AS STRING)
     LOCAL INTEGER w = VAL(FIELD$(info, 1, ","))
     LOCAL INTEGER h = VAL(FIELD$(info, 2, ","))
     
-    LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h), w, h)
-    LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
 
     PAGE WRITE 1
     CLS BC.TUI
     PAGE WRITE 0
-    IF GRF.loadSPR(filePath, 0, 0, 1) THEN   
+    IF GRF.loadSPR(filePath, 0, 0, 1, 1) THEN   
+      LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h), w, h)
+      LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
       BLIT 0, 0, (MM.HRES - w) \ 2, yy, w, h, 1
       TUIwaitForNoKey
       TUIwaitForKey
       TUIwaitForNoKey
+      TUIemptyOFF(dialog)
     ENDIF
-    TUIemptyOFF(dialog)
   ENDIF
 END SUB
 
@@ -3723,6 +3733,40 @@ FUNCTION NCequal(wild AS STRING, name AS STRING) AS INTEGER
   NCequal = (pat = stri)
 END FUNCTION
 
+SUB NCviewST(filePath AS STRING)
+  'simple Atari ST image format viewer
+  'PI1, PI2, PI3
+  
+  LOCAL STRING info = GRF.getSTinfo(ACT_PATH.NC + SEL_NAME.NC), k = ""
+  IF info <> "" THEN
+    LOCAL INTEGER w = VAL(FIELD$(info, 1, ","))
+    LOCAL INTEGER h = VAL(FIELD$(info, 2, ","))
+    LOCAL INTEGER bpp = VAL(FIELD$(info, 3, ","))
+    
+
+    IF GRF.loadST(filePath, 0, 0, 1, 1) THEN
+      LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", w, h, " S = Save to BMP ")
+      LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
+      BLIT 0, 0, (MM.HRES - w) \ 2, yy, w, h, 1
+      TUIwaitForNoKey
+      DO WHILE k = ""
+        k = INKEY$
+      LOOP        
+      TUIwaitForNoKey
+      TUIemptyOFF(dialog)
+      IF UCASE$(k) = "S" THEN
+        GRF.saveBMP(NCgetNoExtension(filePath) + ".BMP", 0, 0, w, h, 1)
+        NCchangeDir(ACTIVE.NC, ACT_PATH.NC)
+        NCcursor(ACTIVE.NC, 1)
+      ENDIF
+    ELSE
+      TUIwarning("Atari ST IMAGE VIEWER", "Loading error")
+    ENDIF
+  ELSE
+    TUIwarning("Atari ST IMAGE VIEWER", "Image can't be decoded")
+  ENDIF
+END SUB
+
 SUB NCviewZX(filePath AS STRING)
   'simple ZX Spectrum image format viewer
   'SCR, BSC
@@ -3733,27 +3777,24 @@ SUB NCviewZX(filePath AS STRING)
     LOCAL INTEGER h = VAL(FIELD$(info, 2, ","))
     LOCAL INTEGER bpp = VAL(FIELD$(info, 3, ","))
     
-    LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", w, h, " S = Save to BMP ")
-    LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
 
-    TEXT MM.HRES \ 2, MM.VRES \ 2, "Please" ,"CB",,, RGB(NOTBLACK), BC.TUI
-    TEXT MM.HRES \ 2, MM.VRES \ 2, "wait" ,"CT",,, RGB(NOTBLACK), BC.TUI
-    IF GRF.loadZX(filePath, 0, 0, 1) THEN   
+    IF GRF.loadZX(filePath, 0, 0, 1, 1) THEN
+      LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", w, h, " S = Save to BMP ")
+      LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    
       BLIT 0, 0, (MM.HRES - w) \ 2, yy, w, h, 1
+      TUIwaitForNoKey
+      DO WHILE k = ""
+         k = INKEY$
+      LOOP        
+      TUIwaitForNoKey
+      TUIemptyOFF(dialog)
+      IF UCASE$(k) = "S" THEN
+        GRF.saveBMP(NCgetNoExtension(filePath) + ".BMP", 0, 0, w, h, 1)
+        NCchangeDir(ACTIVE.NC, ACT_PATH.NC)
+        NCcursor(ACTIVE.NC, 1)
+      ENDIF
     ELSE
-      TEXT MM.HRES \ 2, MM.VRES \ 2, "Loading" ,"CB",,, RGB(NOTBLACK), BC.TUI
-      TEXT MM.HRES \ 2, MM.VRES \ 2, "error!" ,"CT",,, RGB(NOTBLACK), BC.TUI
-    ENDIF
-    TUIwaitForNoKey
-    DO WHILE k = ""
-      k = INKEY$
-    LOOP        
-    TUIwaitForNoKey
-    TUIemptyOFF(dialog)
-    IF UCASE$(k) = "S" THEN
-      GRF.saveBMP(NCgetNoExtension(filePath) + ".BMP", 0, 0, w, h, 1)
-      NCchangeDir(ACTIVE.NC, ACT_PATH.NC)
-      NCcursor(ACTIVE.NC, 1)
+      TUIwarning("ZX Spectrum IMAGE VIEWER", "Loading error")
     ENDIF
   ELSE
     TUIwarning("ZX Spectrum IMAGE VIEWER", "Image can't be decoded")
@@ -3764,7 +3805,7 @@ SUB NCeditHEX(filePath AS STRING)
   'simple hex editor
 
   CLOCK.NC = 2
-  LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, change = 0, b, po = 0, i, ln, cx, cy, edNum, preNum
+  LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, change = 0, b, po = 0, i, ln, cx, cy, edNum
   LOCAL INTEGER cursX = 0, cursY = 0, cursLN(EDIT_ROWS.NC), maxRow, curPos, digit = 0, digPos = 0
   LOCAL INTEGER fCol = RGB(NOTBLACK), bCol = RGB(CYAN), wCol = RGB(WHITE), nCol = RGB(BLUE), rCol = RGB(RED)
   LOCAL STRING li,k
@@ -3839,7 +3880,6 @@ SUB NCeditHEX(filePath AS STRING)
     IF NOT change THEN
       SEEK #3, curPos + 1
       edNum = VAL(INPUT$(1, #3))
-      preNum = edNum
     ENDIF
     DO WHILE change = 0 AND k<>ESC.NC
       DO: k = INKEY$: LOOP WHILE k=""
@@ -3940,11 +3980,8 @@ SUB NCeditHEX(filePath AS STRING)
 
         CASE 13
           'ENTER
-          IF edNum <> preNum THEN
-            SEEK #3, curPos + 1
-            ?#3, CHR$(edNum);
-            preNum = edNum
-          ENDIF
+          SEEK #3, curPos + 1
+          ?#3, CHR$(edNum);
           digPos = 0
           change = 1
 
