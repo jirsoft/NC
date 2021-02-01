@@ -1,5 +1,8 @@
 'Graphic library
-CONST VERSION.GRF = "0.10"
+CONST VERSION.GRF = "0.12"
+
+'FUNCTION GRF.getLuma(x AS INTEGER, y AS INTEGER, pg AS INTEGER) AS INTEGER
+  'return luminiscence of PIXEL x, y, pg (0-255)
 
 'FUNCTION GRF.info(pg AS INTEGER) AS STRING
   'return MODE, BPP, y-lines, pg address, write address
@@ -857,15 +860,13 @@ FUNCTION GRF.loadST(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
         inp = INPUT$(32, #5)
         FOR xx = 0 TO 3
           bb = STR2BIN(UINT16, MID$(inp, 2*xx + 1, 2), BIG)
-          fc = (bb AND 15) << 2
-          pp = fc
+          bb3 = (bb AND 7) << 5
           bb = bb >> 4
-          fc = (bb AND 15) << 3
-          pp = pp + (fc << 5)
+          bb2 = (bb AND 7) << 5
           bb = bb >> 4
-          fc = (bb AND 15) << 2
-          pp = pp + (fc << 11)
-          cols(xx) = pp
+          bb1 = (bb AND 7) << 5
+          cols(xx) = RGB(bb1, bb2, bb3)
+          IF cols(xx) = RGB(BLACK) THEN cols(xx) = RGB(NOTBLACK)
         NEXT xx
         FOR xx = 1 TO 200
           LONGSTRING APPEND bitmap(), INPUT$(160, #5)    
@@ -904,16 +905,13 @@ FUNCTION GRF.loadST(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
         inp = INPUT$(32, #5)
         FOR xx = 0 TO 15
           bb = STR2BIN(UINT16, MID$(inp, 2*xx + 1, 2), BIG)
-          fc = (bb AND 15) << 2
-          pp = fc
+          bb3 = (bb AND 7) << 5
           bb = bb >> 4
-          fc = (bb AND 15) << 3
-          pp = pp + (fc << 5)
+          bb2 = (bb AND 7) << 5
           bb = bb >> 4
-          fc = (bb AND 15) << 2
-          pp = pp + (fc << 11)
-          cols(xx) = pp
-          IF pp = 0 THEN cols(xx) = RGB(NOTBLACK)
+          bb1 = (bb AND 7) << 5
+          cols(xx) = RGB(bb1, bb2, bb3)
+          IF cols(xx) = RGB(BLACK) THEN cols(xx) = RGB(NOTBLACK)
         NEXT xx
         FOR xx = 1 TO 200
           LONGSTRING APPEND bitmap(), INPUT$(160, #5)    
@@ -958,16 +956,13 @@ FUNCTION GRF.loadST(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
         inp = INPUT$(32, #5)
         FOR xx = 0 TO 15
           bb = STR2BIN(UINT16, MID$(inp, 2*xx + 1, 2), BIG)
-          fc = (bb AND 15) << 2
-          pp = fc
+          bb3 = (bb AND 7) << 5
           bb = bb >> 4
-          fc = (bb AND 15) << 3
-          pp = pp + (fc << 5)
+          bb2 = (bb AND 7) << 5
           bb = bb >> 4
-          fc = (bb AND 15) << 2
-          pp = pp + (fc << 11)
-          cols(xx) = pp
-          IF pp = 0 THEN cols(xx) = RGB(NOTBLACK)
+          bb1 = (bb AND 7) << 5
+          cols(xx) = RGB(bb1, bb2, bb3)
+          IF cols(xx) = RGB(BLACK) THEN cols(xx) = RGB(NOTBLACK)
         NEXT xx
         
         LOCAL STRING ln(3)
@@ -1049,7 +1044,6 @@ FUNCTION GRF.loadST(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
           ENDIF
         LOOP 
         CLOSE #5
-        HLPoutDebug(STR$(LLEN(bitmap())))
         bb = STR2BIN(UINT16, LEFT$(inp, 2), BIG)
         IF bb AND 1 THEN
           bc = RGB(WHITE)
@@ -1087,16 +1081,13 @@ FUNCTION GRF.loadST(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
         inp = INPUT$(32, #5)
         FOR xx = 0 TO 3
           bb = STR2BIN(UINT16, MID$(inp, 2*xx + 1, 2), BIG)
-          fc = (bb AND 15) << 2
-          pp = fc
+          bb3 = (bb AND 7) << 5
           bb = bb >> 4
-          fc = (bb AND 15) << 3
-          pp = pp + (fc << 5)
+          bb2 = (bb AND 7) << 5
           bb = bb >> 4
-          fc = (bb AND 15) << 2
-          pp = pp + (fc << 11)
-          cols(xx) = pp
-          IF pp = 0 THEN cols(xx) = RGB(NOTBLACK)
+          bb1 = (bb AND 7) << 5
+          cols(xx) = RGB(bb1, bb2, bb3)
+          IF cols(xx) = RGB(BLACK) THEN cols(xx) = RGB(NOTBLACK)
         NEXT xx
         
         LOCAL STRING ln(1)
@@ -1154,4 +1145,20 @@ FUNCTION GRF.loadST(filePath AS STRING, x AS INTEGER, y AS INTEGER, pg AS INTEGE
   ENDIF
 END FUNCTION
 
+FUNCTION GRF.getLuma(x AS INTEGER, y AS INTEGER, pg AS INTEGER) AS INTEGER
+  'return luminiscence of PIXEL x, y, pg (0-255)
+
+  GRF.getLuma = -1
+  IF x >= 0 THEN
+    IF x < MM.HRES THEN
+      IF y >= 0 THEN
+        IF y < MM.HRES THEN
+          LOCAL INTEGER p = PIXEL(x, y, pg), r = (p >> 16) AND 255, g = (p >> 8) AND 255, b = p AND 255
+          
+          GRF.getLuma = MIN(255, 0.2126 * r + 0.7152 * b + 0.0722 * b)
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDIF  
+END FUNCTION
 

@@ -1,13 +1,13 @@
 #DEFINE "DBG ", "'"
 '#DEFINE "DBG ", ""
-
 '#MMDEBUG ON
+
 OPTION BREAK 0
 DBG OPTION BREAK 3
 
 
 'Napoleon Commander
-CONST VERSION.NC = "1.13"
+CONST VERSION.NC = "1.14"
 
 
 CONST MIN_VERSION.NC = 5.06
@@ -24,10 +24,10 @@ DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
 NCinitDebug
 NCchdir NC_PATH.NC
 
-'#INCLUDE "../LIB/TUI.INC"
-'#INCLUDE "../LIB/GRF.INC"
-#INCLUDE "TUI.INC"
-#INCLUDE "GRF.INC"
+#INCLUDE "../LIB/TUI.INC"
+#INCLUDE "../LIB/GRF.INC"
+'#INCLUDE "TUI.INC"
+'#INCLUDE "GRF.INC"
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
@@ -3735,7 +3735,7 @@ END FUNCTION
 
 SUB NCviewST(filePath AS STRING)
   'simple Atari ST image format viewer
-  'PI1, PI2, PI3
+  'PI1, PI2, PI3, PC1, PC2, PC3
   
   LOCAL STRING info = GRF.getSTinfo(ACT_PATH.NC + SEL_NAME.NC), k = ""
   IF info <> "" THEN
@@ -3743,7 +3743,6 @@ SUB NCviewST(filePath AS STRING)
     LOCAL INTEGER h = VAL(FIELD$(info, 2, ","))
     LOCAL INTEGER bpp = VAL(FIELD$(info, 3, ","))
     
-
     IF GRF.loadST(filePath, 0, 0, 1, 1) THEN
       LOCAL STRING dialog = TUIemptyON(filePath + ", " + STR$(w) + "x" + STR$(h)+ ", " + STR$(bpp)+"bpp", w, h, " S = Save to BMP ")
       LOCAL INTEGER yy = VAL(FIELD$(dialog, 4, ",")) + 4    

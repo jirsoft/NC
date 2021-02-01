@@ -1,5 +1,5 @@
 'Simple TUI, it's prepared for screenshoting
-CONST VERSION.TUI = "0.40"
+CONST VERSION.TUI = "0.42"
 
 'SUB TUIinfo(title AS STRING, txt() AS STRING, logo AS INTEGER)
   'Shows more lines of info text (BLIT #1), also LOGO (blitnum)
@@ -42,8 +42,9 @@ CONST VERSION.TUI = "0.40"
   '(almost) complete file selector
   'ext can be also more extensiions separated by coma (ext = ".BAS,.INC") or "" (select all)
 
-'FUNCTION TUIemptyON(title AS STRING, ww AS INTEGER, hh AS INTEGER) AS STRING
+'FUNCTION TUIemptyON(title AS STRING, ww AS INTEGER, hh AS INTEGER, but AS STRING) AS STRING
   'Shows empty dialog (space), returns coordinates as string "X,Y" (BLIT #9)
+  'if but is used, then is show instead of "OK"
 
 'SUB TUIemptyOFF(coord AS STRING)
   'Close empty (BLIT #9)
@@ -162,7 +163,7 @@ FUNCTION TUIchoice(title AS STRING, txt AS STRING) AS INTEGER
 
   h = foh*cnt + 4*foh
   FOR i = 1 TO cnt
-    w = MAX(w, fow*(LEN(FIELD$(txt, i, ","))+fow/2))
+    w = MAX(w, fow*(2 + LEN(FIELD$(txt, i, ",")) + fow/2))
   NEXT i
   LOCAL INTEGER dx = (MM.HRES-w)\2, dy = (MM.VRES-h)\2 
   
@@ -644,12 +645,15 @@ FUNCTION TUIinput(title AS STRING, txt AS STRING, def AS STRING, en AS STRING) A
   IF k=ESC.TUI THEN TUIinput = ""
 END FUNCTION
 
-FUNCTION TUIemptyON(title AS STRING, ww AS INTEGER, hh AS INTEGER) AS STRING
+FUNCTION TUIemptyON(title AS STRING, ww AS INTEGER, hh AS INTEGER, but AS STRING) AS STRING
   'Shows empty dialog (space), returns coordinates as string "X,Y" (BLIT #9)
+  'if but is used, then is show instead of "OK"
 
   FONT FONT.TUI
+  LOCAL STRING button = but
+  IF button = "" THEN button = "  OK  "
   LOCAL INTEGER fow = MM.INFO(FONTWIDTH)
-  LOCAL INTEGER w = MAX(4 * fow + fow * LEN(title), 2 * fow + ww) 'minimum width
+  LOCAL INTEGER w = MAX(4 * fow + fow * LEN(title), 2 * fow + ww, fow*(4+LEN(button))) 'minimum width
   LOCAL INTEGER foh = MM.INFO(FONTHEIGHT)
   LOCAL INTEGER h = 3 * foh + hh 'height
 
@@ -660,7 +664,7 @@ FUNCTION TUIemptyON(title AS STRING, ww AS INTEGER, hh AS INTEGER) AS STRING
   BOX dx+0,dy+0,w,h,0,BC.TUI,BC.TUI
   BOX dx+fow/4,dy+foh/2,w-fow/2,h-foh*3/4,2,FC.TUI,BC.TUI
   TEXT dx+w\2,dy+1," " + title + " ","CT",,,FC.TUI,BC.TUI
-  TEXT dx+w\2,dy+h-3/2*foh,"  OK  ","CT",,,BC.TUI,FC.TUI
+  TEXT dx+w\2,dy+h-3/2*foh,button,"CT",,,BC.TUI,FC.TUI
   ON.TUI = 1: X.TUI = dx: Y.TUI = dy: W.TUI = w: H.TUI = h 'for screenshot
 
   TUIemptyON = STR$(dx) + "," + STR$(dy) + "," + STR$(dx + fow) + "," + STR$(dy + foh + 1)
