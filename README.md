@@ -36,6 +36,11 @@ NCserialServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
 
 
 ### VERSION HISTORY
+#### v1.13
+	fixed bug in HEX editor (00 couldn't be entered)
+	extended About dialog (versions of GRF.INC and TUI.INC)
+	Atari ST graphic formats in GRF.INC
+	
 #### v1.12
 	finally finished basic HEX editor on F4 key, it can just overwrite, not to make file longer or shorter
 	modified MANUAL.TXT to comply with changes
