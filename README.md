@@ -3,11 +3,11 @@
 
 Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2.
 
-It has ability to connect to Mac/PC/Linux computer either through serial port or WiFi with help of included Python server **NCudpServer.py** or **NCserialServer.py** (here is also needed installed **pyserial** with `pip install pyserial`).
+It has ability to connect to Mac/PC/Linux computer either through serial port or WiFi with help of included Python server **NCserver.py** (when serial port used,  **pyserial** have to be installed with with `pip install pyserial`). **This server needs as minimum v0.66 of ESP8266 firmware (https://github.com/jirsoft/CMM2ESP)**
 
 Starting server without arguments use defaults from begin of the Python script, arguments can any combination of:
 ```
-NCudpServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
+NCserver.py -s <serverdir> -ip <IP> (for UDP server)
   <serverdir>
     base directory for NCserver, Napoleon Commander on CMM2 see just inside of this
 
@@ -17,11 +17,11 @@ NCudpServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
   <verbose>
     verbose level (0=min, 3 = max)
 ``` 
-`NCudpServer.py -h` for help.
+`NCserver.py -h` for help.
 
 or for serial server:
 ```
-NCserialServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
+NCserver.py -s <serverdir> -p <portname> -b <baudrate>
   <serverdir>
     base directory for NCserver, Napoleon Commander on CMM2 see just inside of this
 
@@ -32,10 +32,12 @@ NCserialServer.py -s <serverdir> -p <portname> -b <baudrate> (for serial server)
     speed of serial port, need to be the same as set in Napoleon Commander
     (F11, option 6 checked=691200, unchecked=230400)
 ```
-`NCserialServer.py -h` for help.
-
 
 ### VERSION HISTORY
+#### v1.26
+	combined serial and network communication (switch ON/OFF ESP8266 with F11, restart server and use other medium)
+	improved serial/network speed
+	
 #### v1.13
 	fixed bug in HEX editor (00 couldn't be entered)
 	extended About dialog (versions of GRF.INC and TUI.INC)
