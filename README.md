@@ -3,7 +3,9 @@
 
 Simple file commander based on ancient Norton (Volkov...) commanders for DOS, now for Colour Maximite 2.
 
-It has ability to connect to Mac/PC/Linux computer either through serial port or WiFi with help of included Python server **NCserver.py** (when serial port used,  **pyserial** have to be installed with with `pip install pyserial`). **This server needs as minimum v0.66 of ESP8266 firmware (https://github.com/jirsoft/CMM2ESP)**
+It has ability to connect to Mac/PC/Linux computer either through serial port or WiFi with help of included Python server **NCserver.py** (when serial port used,  **pyserial** have to be installed with with `pip install pyserial`).
+
+**This server needs as minimum v0.66 of ESP8266 firmware (https://github.com/jirsoft/CMM2ESP)**
 
 Starting server without arguments use defaults from begin of the Python script, arguments can any combination of:
 ```
