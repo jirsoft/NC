@@ -1,5 +1,5 @@
 'Napoleon Commander
-CONST VERSION.NC = "1.24"
+CONST VERSION.NC = "1.26"
 
 #DEFINE "DBG ", "'"
 '#DEFINE "DBG ", ""
@@ -17,6 +17,8 @@ OPTION BASE 0
 OPTION CRLF CR
 
 DIM INTEGER INIT.NC = 0
+DIM INTEGER FIRST_SERIAL_RUN.NC = 1
+DIM STRING DEBUG.NC = NC_PATH.NC + "DEBUG.TXT"
 
 NCinitDebug
 NCoutDebug("NC v" + VERSION.NC + " started")
@@ -52,6 +54,7 @@ DIM INTEGER SERIAL_ON.NC = 0
 
 DIM STRING ESP_SSID.NC
 DIM STRING ESP_PASS.NC
+DIM STRING ESP_DATETIME.NC
 DIM INTEGER ESP.NC = 1
 DIM STRING ESP_INIT.NC = "COM1:691200,8050"
 DIM STRING ESP_CONNECTION.NC = "", ESP_VERSION.NC = ""
@@ -157,6 +160,8 @@ DO
         NCdrawMenuPart(9)
         NCsetMenu(9, "QuitNC", 1)
         NCdrawMenuPart(10)
+        DBG NCsetMenu(10, "DEBUG", 1)
+        DBG NCdrawMenuPart(11)
         NCsetMenu(11,"WiFi", ESP.NC)
         NCdrawMenuPart(12)
       ELSE
@@ -174,6 +179,8 @@ DO
         NCdrawMenuPart(9)
         NCsetMenu(9, "About", 1)
         NCdrawMenuPart(10)
+        NCsetMenu(10, "Config", 1)
+        NCdrawMenuPart(11)
         NCsetMenu(11,"LP=RP", 1)
         NCdrawMenuPart(12)
       ENDIF
@@ -201,16 +208,19 @@ SUB NCespTest
     ESP_VERSION.NC = NCreadUntilLF()
     IF ESP_VERSION.NC <> "" THEN
       IF LEFT$(ESP_VERSION.NC, 5) = "ESP v" THEN
+        ESP_ON.NC = 1
         ESP.NC = 1
       ELSE
+        ESP_ON.NC = 0
         ESP.NC = 0
         ESP_VERSION.NC = ""
       ENDIF
     ELSE
+      ESP_ON.NC = 0
       ESP.NC = 0
       ESP_VERSION.NC = ""
     ENDIF
-  CLOSE #1
+  'CLOSE #1
   TUIwaitingOFF(dialog)
 END SUB
 
@@ -227,7 +237,7 @@ SUB NCespWifiTest(noDialog AS INTEGER)
       ESP_CONNECTION.NC = NCreadUntilLF()
     LOOP
     WIFI.NC = (ESP_CONNECTION.NC <> "")
-  CLOSE #1
+  'CLOSE #1
   IF NOT noDialog THEN TUIwaitingOFF(dialog)
 END SUB
 
@@ -245,12 +255,13 @@ SUB NCespConnect(SSID AS STRING, PASS AS STRING)
       ESP_CONNECTION.NC = NCreadUntilLF()
     LOOP
     WIFI.NC = (LEFT$(ESP_CONNECTION.NC, 9) = "Connected")
-  CLOSE #1
+  'CLOSE #1
 END SUB
 
 SUB NCespReboot
   'reboots ESP8266
 
+  ON ERROR SKIP
   OPEN ESP_INIT.NC AS #1
     ?#1, "@reboot" + CHR$(10);
   CLOSE #1
@@ -271,7 +282,8 @@ FUNCTION NCespDisconnect() AS INTEGER
     DO WHILE dis = "" AND ((TIMER-timeout) < 5000)
       dis = NCreadUntilLF()
     LOOP
-    CLOSE #1
+    'CLOSE #1
+
     NCespDisconnect = (dis = "Disconnected")
   ENDIF
 END FUNCTION
@@ -319,13 +331,16 @@ FUNCTION NCserialOK() AS INTEGER
   LOCAL STRING lineSerial = ""
 
   NCserialOK = 0
-
   IF ESP.NC THEN
     IF NOT WIFI.NC THEN
       TUIwarning("WIFI NOT CONNECTED", "Use ALT+F12 for connect to WiFi")
     ELSE
       IF NOT ESP_ON.NC THEN
-        IF SERIAL_ON.NC THEN CLOSE #1
+        IF SERIAL_ON.NC THEN 
+          SERIAL_ON.NC = 0
+          ON ERROR SKIP
+          CLOSE #1
+        ENDIF
         OPEN ESP_INIT.NC AS #1
         ESP_ON.NC = 1
       ENDIF
@@ -339,7 +354,11 @@ FUNCTION NCserialOK() AS INTEGER
     ENDIF
   ELSE
     IF NOT SERIAL_ON.NC THEN
-      IF ESP_ON.NC THEN CLOSE #1
+      IF ESP_ON.NC THEN
+        ESP_ON.NC = 0
+        ON ERROR SKIP
+        CLOSE #1
+      ENDIF
       OPEN SERIAL_INIT.NC AS #1
       SERIAL_ON.NC = 1
     ENDIF
@@ -555,11 +574,21 @@ SUB NCconfig
   
   IF oldSel AND 128 THEN
     IF CFG_ESP.NC THEN
+      IF SERIAL_ON.NC THEN
+        ON ERROR SKIP
+        CLOSE #1
+        SERIAL_ON.NC = 0
+      ENDIF
       NCespTest
       IF ESP.NC THEN
         NCespWifiTest
       ENDIF
     ELSE
+      IF ESP_ON.NC THEN
+        ON ERROR SKIP
+        CLOSE #1
+        SERIAL_ON.NC = 0
+      ENDIF
       WIFI.NC = 0
       ESP.NC = 0
       ESP_VERSION.NC = ""
@@ -636,6 +665,7 @@ SUB NCconfigLoad
     FONT.TUI = 8
   ELSE
     ESP.NC = 0
+    ESP_ON.NC = 0
     ESP_VERSION.NC = ""
   ENDIF
 END SUB
@@ -1799,14 +1829,14 @@ END SUB
 SUB NCinitDebug
   'erase debug file
 
-  OPEN NC_PATH.NC + "DEBUG.TXT" FOR OUTPUT AS #6
+  OPEN DEBUG.NC FOR OUTPUT AS #6
   CLOSE #6
 END SUB
 
 SUB NCoutDebug(s AS STRING)
   'append to debug file
 
-  DBG OPEN NC_PATH.NC + "DEBUG.TXT" FOR APPEND AS #6
+  DBG OPEN DEBUG.NC FOR APPEND AS #6
   DBG ?#6,DATE$ + " " + TIME$ + " " + s
   DBG CLOSE #6
 END SUB
@@ -1832,7 +1862,7 @@ SUB NCchangeDir(side AS INTEGER, p AS STRING, leaveCP AS INTEGER)
 
   IF LEFT$(p, 3) = "S:/" THEN
     'TUIwarning("CHANGE DIR", "'" + p + "'")
-    NCserialOut("D" + p + "|8000", 1)
+    'NCserialOut("D" + p + "|8000", 1)
     NCwifiDir(side, p)
     'PATH.NC(side) = SERIAL_PATH.NC
     IF leaveCP AND (side = ACTIVE.NC) THEN
@@ -1967,7 +1997,7 @@ SUB NCserverCopy(source AS STRING, dest AS STRING)
           partData = NCreadUntilLF()
         LOOP
         IF partData = "DONE" THEN
-          NCserialOut("D" + NON_PATH.NC + "|8000", 1)
+          'NCserialOut("D" + NON_PATH.NC + "|8000", 1)
           NCwifiDir(1-ACTIVE.NC, NON_PATH.NC)
           POS.NC(1-ACTIVE.NC) = 0
           CURSOR.NC(1-ACTIVE.NC) = 0
@@ -1991,16 +2021,17 @@ END SUB
 
 SUB NCserialOut(s AS STRING, useEspPrefix AS INTEGER)
   'print to serial with LF
-
   
   IF SERIAL_ON.NC THEN
-    'ON ERROR SKIP
-    'OPEN SERIAL_INIT.NC AS #1  
+    IF FIRST_SERIAL_RUN.NC THEN
+      FIRST_SERIAL_RUN.NC = 0
+      IF LOF(#1) < 256 THEN
+        ?#1,"#NC start" + LF.NC;
+      ENDIF
+    ENDIF
     ?#1,s + LF.NC;
 
   ELSEIF ESP_ON.NC THEN
-    'ON ERROR SKIP
-    'OPEN ESP_INIT.NC AS #1  
     IF useEspPrefix THEN
       ?#1, ESP_PREFIX.NC + s + LF.NC;
     ELSE
@@ -2212,7 +2243,7 @@ SUB NCesc
         ELSE
           STR.NC = ACT_PATH.NC + SEL_NAME.NC
         ENDIF
-        NCserialOut("D" + STR.NC + "|8000", 1)
+        'NCserialOut("D" + STR.NC + "|8000", 1)
         NCwifiDir(ACTIVE.NC, STR.NC)
         ACT_PATH.NC = NCchangePath(ACT_PATH.NC, SEL_NAME.NC)
         NCdrawCL(ACT_PATH.NC)
@@ -2242,7 +2273,7 @@ SUB NCenter
       ELSE
         STR.NC = ACT_PATH.NC + SEL_NAME.NC
       ENDIF
-      NCserialOut("D" + STR.NC +"|8000", 1)
+      'NCserialOut("D" + STR.NC +"|8000", 1)
       NCwifiDir(ACTIVE.NC, STR.NC)
       CURSOR.NC(ACTIVE.NC) = 0
       POS.NC(ACTIVE.NC) = 0
@@ -2766,17 +2797,21 @@ SUB NCfKeys(fkey AS INTEGER)
         about(8) = "I'm living inside of " + myCMM2
         IF ESP_VERSION.NC <> "" THEN
           about(9)="and have also implanted an special organ, " + ESP_VERSION.NC
-        ENDIF
-        NCespWifiTest(1)
-        IF WIFI.NC THEN
-          NCoutDebug(ESP_CONNECTION.NC)
-          about(10)= "(" + FIELD$(ESP_CONNECTION.NC, 6, ",") + "@" + FIELD$(ESP_CONNECTION.NC, 1, ",") + ", BSSID " + FIELD$(ESP_CONNECTION.NC, 2, ",") + " with RSI" + FIELD$(ESP_CONNECTION.NC, 3, ",") + "dB)"
+          NCespWifiTest(1)
+          IF WIFI.NC THEN
+            NCoutDebug(ESP_CONNECTION.NC)
+            about(10)= "(" + FIELD$(ESP_CONNECTION.NC, 6, ",") + "@" + FIELD$(ESP_CONNECTION.NC, 1, ",") + ", BSSID " + FIELD$(ESP_CONNECTION.NC, 2, ",") + " with RSI" + FIELD$(ESP_CONNECTION.NC, 3, ",") + "dB)"
+          ENDIF
         ENDIF
         TUIinfo("ABOUT ME",about(), LOGO.NC)
       ENDIF
 
     CASE 155  'F11
-      NCconfig
+      IF ALT.NC THEN
+        DBG NCviewTXT(DEBUG.NC)
+      ELSE
+        NCconfig
+      ENDIF
 
     CASE 156  'F12
       IF ALT.NC THEN
@@ -3414,198 +3449,6 @@ SUB NCkey(kk AS INTEGER)
   END SELECT
 END SUB
 
-SUB _NCdirFromServer(source AS STRING, dest AS STRING)
-  'copy complete directory from server
-
-  LOCAL INTEGER i, cnt
-  LOCAL INTEGER strip = LEN(source) - LEN(NCgetName(source)) - 1
-  LOCAL STRING dst, lineSerial
-
-  NCserialOut("T" + source, 1)
-
-  lineSerial = ""
-  DO WHILE lineSerial = ""
-    lineSerial = NCreadUntilLF()
-  LOOP
-
-  IF LEFT$(lineSerial, 1) = "T" THEN
-    cnt = VAL(MID$(lineSerial,2))
-    LOCAL STRING tree(cnt)
-    FOR i = 1 TO cnt
-      NCserialOut("NEXT")         
-      lineSerial = ""
-      DO WHILE lineSerial = ""
-        lineSerial = NCreadUntilLF()
-      LOOP
-      tree(i) = lineSerial
-    NEXT i
-  ENDIF
-  FOR i = 1 TO cnt
-    lineSerial = FIELD$(tree(i), 1, "|")
-    dst = dest + MID$(lineSerial, strip)
-    IF LEFT$(tree(i), 1) = "D" THEN
-      IF NCmkdir(dst) THEN
-        TUIwarning("DIR COPY ERROR", "Can't create '" + dst + "'")
-        EXIT FOR
-      ENDIF
-    ELSE
-      NCfileFromServer("S:/" + MID$(lineSerial, 2), dst)
-    ENDIF
-  NEXT i
-  NCchangeDir(1 - ACTIVE.NC, NON_PATH.NC)
-END SUB
-
-SUB NCfileFromServer(src AS STRING, dst AS STRING)
-  'copy file from server to local
-
-  CONST partLen = 8000
-  LOCAL STRING lineSerial, partData, dialog
-  LOCAL INTEGER i, fileLen, partNum, partRem, bufLen, dataLen, j
-
-  NCserialOut("R" + src + "|" + STR$(partLen), 1)
-  NCoutDebug("NCfileFromServer " + src + " " + dst)
-
-  partData = ""
-  DO WHILE partData = ""
-    partData = NCreadUntilLF()
-  LOOP
-  IF FIELD$(partData, 1, "|") = "READY" THEN
-    fileLen = VAL(FIELD$(partData, 2, "|"))
-    partNum = fileLen \ partLen
-    partRem = fileLen MOD partLen
-    NCoutDebug(partData + "=" + STR$(partNum) + "*" + STR$(partLen) + "+" + STR$(partRem))
-    dialog = TUIwaitingON("COPY '" + NCgetName(src) + "' (SRV" + RIGHT.NC + "LOC, " + STR$(fileLen) + " bytes)")
-
-    NCserialOut("START")         
-
-    OPEN dst FOR OUTPUT AS #2
-
-    FOR i = 1 TO partNum
-      IF LOC(#1) > 0 THEN lineSerial = INPUT$(LOC(#1), #1) 'empty garbage
-
-      NCserialOut("NEXT")         
-      TUIwaitingProgress(dialog, 100 * i / partNum)
-      dataLen = 0
-      DO WHILE dataLen < partLen
-        bufLen = MIN(LOC(#1), 250, partLen - dataLen)
-        IF bufLen > 0 THEN
-          PRINT #2, INPUT$(bufLen, #1);
-          INC dataLen, bufLen
-        ENDIF
-      LOOP
-    NEXT i
-
-    IF partRem > 0 THEN
-      IF LOC(#1) > 0 THEN lineSerial = INPUT$(LOC(#1), #1)
-      NCserialOut("NEXT")         
-      dataLen = 0
-      DO WHILE dataLen < partRem
-        bufLen = MIN(LOC(#1), 250, partRem - dataLen)
-        IF bufLen > 0 THEN
-          PRINT #2, INPUT$(bufLen, #1);
-          INC dataLen, bufLen
-        ENDIF
-      LOOP
-    ENDIF
-
-    CLOSE #2
-    NCserialOut("DONE")
-    TUIwaitingOFF(dialog)
-  ELSE
-
-    NCoutDebug("Something strange received: " + partData)
-  ENDIF
-END SUB
-
-SUB _NCfileFromServer(src AS STRING, dst AS STRING)
-  'copy file from server to local
-
-  CONST partLen = 8000
-  LOCAL STRING lineSerial, partData, dialog
-  LOCAL INTEGER i, fileLen, partNum, partRem, bufLen, dataLen, j
-  LOCAL INTEGER BUFFER.NC(BUFFER_LEN.NC \ 8)
-
-  NCserialOut("R" + src + "|" + STR$(partLen), 1)
-  'NCoutDebug("NCfileFromServer " + src + " " + dst)
-
-  partData = ""
-  DO WHILE partData = ""
-    partData = NCreadUntilLF()
-  LOOP
-  IF FIELD$(partData, 1, "|") = "READY" THEN
-    fileLen = VAL(FIELD$(partData, 2, "|"))
-    partNum = fileLen \ partLen
-    partRem = fileLen MOD partLen
-    NCoutDebug(partData + "=" + STR$(partNum) + "*" + STR$(partLen) + "+" + STR$(partRem))
-    dialog = TUIwaitingON("COPY '" + NCgetName(src) + "' (SRV" + RIGHT.NC + "LOC, " + STR$(fileLen) + " bytes)")
-
-    'LONGSTRING CLEAR BUFFER.NC()
-    'bufLen = 0
-
-    NCserialOut("START")         
-    NCoutDebug("START")
-
-    OPEN dst FOR OUTPUT AS #2
-
-    FOR i = 1 TO partNum
-      'NCoutDebug("PART" + STR$(i))
-      'IF bufLen + partLen > BUFFER_LEN.NC THEN
-      '  LONGSTRING PRINT #2, BUFFER.NC();
-      '  LONGSTRING CLEAR BUFFER.NC()
-      '  bufLen = 0
-      'ENDIF
-      
-      IF LOC(#1) > 0 THEN lineSerial = INPUT$(LOC(#1), #1) 'empty garbage
-
-      NCserialOut("NEXT")         
-      NCoutDebug("NEXT")
-      TUIwaitingProgress(dialog, 100 * i / partNum)
-      'DO WHILE LOC(#1) < partLen: LOOP
-      dataLen = 0
-      DO WHILE dataLen < partLen
-        bufLen = MIN(LOC(#1), 250, partLen - dataLen)
-        IF bufLen > 0 THEN
-          PRINT #2, INPUT$(bufLen, #1);
-          INC dataLen, bufLen
-          NCoutDebug("BufLen=" + STR$(bufLen) + ", dataLen=" + STR$(dataLen) + ", partLen=" + STR$(partLen))
-        ENDIF
-      LOOP
-      'LONGSTRING APPEND BUFFER.NC(), INPUT$(partLen, #1)
-      'INC bufLen, partLen
-    NEXT i
-    'IF bufLen > 0 THEN
-    '  LONGSTRING PRINT #2, BUFFER.NC();
-    '  LONGSTRING CLEAR BUFFER.NC()
-    '  bufLen = 0
-    'ENDIF
-    IF partRem > 0 THEN
-      NCoutDebug("REMAINDER")
-      IF LOC(#1) > 0 THEN lineSerial = INPUT$(LOC(#1), #1)
-      NCserialOut("NEXT")         
-      NCoutDebug("NEXT")
-      dataLen = 0
-      DO WHILE dataLen < partRem
-        bufLen = MIN(LOC(#1), 250, partRem - dataLen)
-        IF bufLen > 0 THEN
-          PRINT #2, INPUT$(bufLen, #1);
-          INC dataLen, bufLen
-          NCoutDebug("BufLen=" + STR$(bufLen) + ", dataLen=" + STR$(dataLen) + ", partRem=" + STR$(partRem))
-        ENDIF
-      LOOP
-      'DO WHILE LOC(#1) < partRem: LOOP
-      '?#2, INPUT$(partRem, #1);
-    ENDIF
-
-    CLOSE #2
-    NCserialOut("DONE")
-    NCoutDebug("DONE")
-    TUIwaitingOFF(dialog)
-  ELSE
-
-    NCoutDebug("Something strange received: " + partData)
-  ENDIF
-END SUB
-
 SUB NCviewC64(filePath AS STRING)
   'simple C64 image format viewer
   'HBM, HED, DD, KOA, missing DD, GG
@@ -4049,9 +3892,11 @@ END SUB
 SUB NCwifiDir(side AS INTEGER, pth AS STRING)
   'get dir from serial
 
-  CONST partLen = 8000
+  LOCAL INTEGER partLen = 250 + ESP_ON.NC*7750
   LOCAL STRING lineSerial, partData, dialog
   LOCAL INTEGER i, dirLen, partNum, partRem, bufLen, dataLen, j
+
+  NCserialOut("D" + pth + "|" + STR$(partLen), 1)
 
   IF pth <> "" THEN
     IF RIGHT$(pth, 1) <> "/" THEN CAT pth, "/"
@@ -4068,7 +3913,7 @@ SUB NCwifiDir(side AS INTEGER, pth AS STRING)
     LONGSTRING CLEAR buf()
     partNum = dirLen \ partLen
     partRem = dirLen MOD partLen
-    NCserialOut("START")         
+    NCserialOut("#START")         
 
     FOR i = 1 TO partNum
       IF LOC(#1) > 0 THEN 
@@ -4077,7 +3922,7 @@ SUB NCwifiDir(side AS INTEGER, pth AS STRING)
         LOOP
       ENDIF
 
-      NCserialOut("NEXT")         
+      NCserialOut("#NEXT")
       dataLen = 0
       DO WHILE dataLen < partLen
         bufLen = MIN(LOC(#1), 250, partLen - dataLen)
@@ -4094,7 +3939,7 @@ SUB NCwifiDir(side AS INTEGER, pth AS STRING)
           lineSerial = INPUT$(MIN(LOC(#1),100), #1)
         LOOP
       ENDIF
-      NCserialOut("NEXT")         
+      NCserialOut("#NEXT")
       dataLen = 0
       DO WHILE dataLen < partRem
         bufLen = MIN(LOC(#1), 250, partRem - dataLen)
@@ -4105,8 +3950,7 @@ SUB NCwifiDir(side AS INTEGER, pth AS STRING)
       LOOP
     ENDIF
 
-    NCserialOut("DONE")
-
+    NCserialOut("#DONE")
     partData = ""
     COUNT.NC(side) = -1
     DO WHILE LLEN(buf()) > 0
@@ -4144,7 +3988,7 @@ END SUB
 SUB NCdirFromServer(source AS STRING, dest AS STRING)
   'copy complete directory from server
 
-  CONST partLen = 8000
+  LOCAL INTEGER partLen = 250 + ESP_ON.NC*7750
   LOCAL INTEGER strip = LEN(source) - LEN(NCgetName(source)) - 1
   LOCAL STRING  partData, dst
   LOCAL INTEGER i, dirLen, partNum, partRem, bufLen, dataLen
@@ -4162,7 +4006,7 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
     LONGSTRING CLEAR buf()
     partNum = dirLen \ partLen
     partRem = dirLen MOD partLen
-    NCserialOut("START")         
+    NCserialOut("#START")         
 
     FOR i = 1 TO partNum
       IF LOC(#1) > 0 THEN 
@@ -4171,7 +4015,7 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
         LOOP
       ENDIF
 
-      NCserialOut("NEXT")         
+      NCserialOut("#NEXT")         
       dataLen = 0
       DO WHILE dataLen < partLen
         bufLen = MIN(LOC(#1), 250, partLen - dataLen)
@@ -4188,7 +4032,7 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
           partData = INPUT$(MIN(LOC(#1),100), #1)
         LOOP
       ENDIF
-      NCserialOut("NEXT")         
+      NCserialOut("#NEXT")         
       dataLen = 0
       DO WHILE dataLen < partRem
         bufLen = MIN(LOC(#1), 250, partRem - dataLen)
@@ -4198,7 +4042,7 @@ SUB NCdirFromServer(source AS STRING, dest AS STRING)
         ENDIF
       LOOP
     ENDIF
-    NCserialOut("DONE")
+    NCserialOut("#DONE")
 
     partData = ""
     DO WHILE LLEN(buf()) > 0
@@ -4236,7 +4080,7 @@ FUNCTION NCserverDirInfo(filePath AS STRING) AS INTEGER
 
   LOCAL INTEGER bytes = 0, items = 0
 
-  CONST partLen = 8000
+  LOCAL INTEGER partLen = 250 + ESP_ON.NC*7750
   LOCAL STRING  partData
   LOCAL INTEGER i, dirLen, partNum, partRem, bufLen, dataLen
 
@@ -4253,7 +4097,7 @@ FUNCTION NCserverDirInfo(filePath AS STRING) AS INTEGER
     LONGSTRING CLEAR buf()
     partNum = dirLen \ partLen
     partRem = dirLen MOD partLen
-    NCserialOut("START")         
+    NCserialOut("#START")         
 
     FOR i = 1 TO partNum
       IF LOC(#1) > 0 THEN 
@@ -4262,7 +4106,7 @@ FUNCTION NCserverDirInfo(filePath AS STRING) AS INTEGER
         LOOP
       ENDIF
 
-      NCserialOut("NEXT")         
+      NCserialOut("#NEXT")         
       dataLen = 0
       DO WHILE dataLen < partLen
         bufLen = MIN(LOC(#1), 250, partLen - dataLen)
@@ -4279,7 +4123,7 @@ FUNCTION NCserverDirInfo(filePath AS STRING) AS INTEGER
           partData = INPUT$(MIN(LOC(#1),100), #1)
         LOOP
       ENDIF
-      NCserialOut("NEXT")         
+      NCserialOut("#NEXT")         
       dataLen = 0
       DO WHILE dataLen < partRem
         bufLen = MIN(LOC(#1), 250, partRem - dataLen)
@@ -4289,7 +4133,7 @@ FUNCTION NCserverDirInfo(filePath AS STRING) AS INTEGER
         ENDIF
       LOOP
     ENDIF
-    NCserialOut("DONE")
+    NCserialOut("#DONE")
     partData = ""
     DO WHILE LLEN(buf()) > 0
       bufLen = LINSTR(buf(), LF.NC)
@@ -4318,38 +4162,10 @@ FUNCTION NCserverDirInfo(filePath AS STRING) AS INTEGER
   NCserverDirInfo = (bytes << 16) + items  
 END FUNCTION
 
-FUNCTION _NCserverDirInfo(filePath AS STRING) AS INTEGER
-  'count files and size of server directory
-
-  LOCAL INTEGER bytes = 0, items = 0, i
-  LOCAL STRING dst, lineSerial
-
-  NCserialOut("T" + filePath, 1)
-
-  lineSerial = ""
-  DO WHILE lineSerial = ""
-    lineSerial = NCreadUntilLF()
-  LOOP
-  IF LEFT$(lineSerial, 1) = "T" THEN
-    items = VAL(MID$(lineSerial,2))
-    FOR i = 0 TO items - 1
-      NCserialOut("NEXT")         
-      lineSerial = ""
-      DO WHILE lineSerial = ""
-        lineSerial = NCreadUntilLF()
-      LOOP
-      IF LEFT$(lineSerial, 1) = "F" THEN
-        INC bytes, VAL(FIELD$(lineSerial, 2, "|"))
-      ENDIF
-    NEXT i
-  ENDIF
-  NCserverDirInfo = (bytes << 16) + items  
-END FUNCTION
-
 SUB NCfileToServer(source AS STRING, dest AS STRING, dir AS INTEGER)
   'copy file from local to server
 
-  CONST partLen = 8000
+  LOCAL INTEGER partLen = 250 + ESP_ON.NC*7750
   LOCAL STRING partData
   LOCAL INTEGER fileLen = MM.INFO(FILESIZE source), i, bufLen
   LOCAL INTEGER tim = TIMER
@@ -4372,79 +4188,161 @@ SUB NCfileToServer(source AS STRING, dest AS STRING, dir AS INTEGER)
 
   'NCoutDebug(partData)
   IF partData = "READY" THEN
-
     OPEN source FOR INPUT AS #2
-    FOR i = 1 TO partNum
-      IF fileLen > 5000 THEN
-        TUIwaitingProgress(dialog, 100 * i / partNum)
+
+    IF ESP_ON.NC THEN    
+      FOR i = 1 TO partNum
+        IF fileLen > 5000 THEN
+          TUIwaitingProgress(dialog, 100 * i / partNum)
+        ENDIF
+        'IF LOC(#1) > 0 THEN partData = INPUT$(LOC(#1), #1) 'empty garbage
+
+        actLen = 0
+        DO WHILE actLen < partLen
+          partData = ""
+          DO WHILE partData = ""
+            partData = NCreadUntilLF()
+          LOOP
+          IF partData = "NEXT" THEN
+            bufLen = MIN(125, partLen - actLen)
+            ?#1, INPUT$(bufLen, #2);
+            'NCoutDebug("NEXT " + STR$(bufLen) + " bytes sent")
+            INC actLen, bufLen  
+          ENDIF
+        LOOP
+
+        DO
+          partData = ""
+          DO WHILE partData = ""
+            partData = NCreadUntilLF()
+          LOOP
+          'NCoutDebug(STR$(i-1) + " -> " + partData)
+        LOOP WHILE VAL(partData) <> (i - 1)
+      NEXT i 
+
+      IF partRem > 0 THEN
+        'IF LOC(#1) > 0 THEN partData = INPUT$(LOC(#1), #1) 'empty garbage
+
+        actLen = 0
+        DO WHILE actLen < partRem
+          partData = ""
+          DO WHILE partData = ""
+            partData = NCreadUntilLF()
+          LOOP
+          IF partData = "NEXT" THEN
+            bufLen = MIN(125, partRem - actLen)
+            ?#1, INPUT$(bufLen, #2);
+            'NCoutDebug("NEXT " + STR$(bufLen) + " bytes sent")
+            INC actLen, bufLen  
+          ENDIF
+        LOOP
+
+        DO
+          partData = ""
+          DO WHILE partData = ""
+            partData = NCreadUntilLF()
+          LOOP
+          'NCoutDebug(STR$(partNum) + " (LAST) -> " + partData)
+        LOOP WHILE VAL(partData) <> partNum
+        TUIwaitingOFF(dialog)
       ENDIF
-      'IF LOC(#1) > 0 THEN partData = INPUT$(LOC(#1), #1) 'empty garbage
+  
+    ELSE 'serial port
       actLen = 0
-      DO WHILE actLen < partLen
-        partData = ""
-        DO WHILE partData = ""
-          partData = NCreadUntilLF()
-        LOOP
-        IF partData = "NEXT" THEN
-          bufLen = MIN(125, partLen - actLen)
-          ?#1, INPUT$(bufLen, #2);
-          'NCoutDebug(STR$(bufLen) + " bytes sent")
-          INC actLen, bufLen  
+      DO WHILE actLen < fileLen
+        bufLen = MIN(250, fileLen - actLen)
+        ?#1, INPUT$(bufLen, #2);
+        INC actLen, bufLen
+        IF fileLen > 5000 THEN
+          TUIwaitingProgress(dialog, 100 * actLen / fileLen)
         ENDIF
       LOOP
-
-      DO
-        partData = ""
-        DO WHILE partData = ""
-          partData = NCreadUntilLF()
-        LOOP
-        'NCoutDebug(STR$(i-1) + " -> " + partData)
-      LOOP WHILE VAL(partData) <> (i - 1)
-    NEXT i 
-
-    IF partRem > 0 THEN
-      'IF LOC(#1) > 0 THEN partData = INPUT$(LOC(#1), #1) 'empty garbage
-      actLen = 0
-      DO WHILE actLen < partRem
-        partData = ""
-        DO WHILE partData = ""
-          partData = NCreadUntilLF()
-        LOOP
-        IF partData = "NEXT" THEN
-          bufLen = MIN(125, partRem - actLen)
-          ?#1, INPUT$(bufLen, #2);
-          'NCoutDebug(STR$(bufLen) + " bytes sent")
-          INC actLen, bufLen  
-        ENDIF
-      LOOP
-
-      DO
-        partData = ""
-        DO WHILE partData = ""
-          partData = NCreadUntilLF()
-        LOOP
-        'NCoutDebug(STR$(partNum) + " (LAST) -> " + partData)
-      LOOP WHILE VAL(partData) <> partNum
+      TUIwaitingOFF(dialog)
     ENDIF
-
     CLOSE #2
 
-    TUIwaitingOFF(dialog)
-    tim = TIMER - tim
-    NCoutDebug("TIME=" + STR$(tim/1000, 0, 1) + "s (" + STR$(fileLen/tim/1.024, 0, 1) +  " kB/s)")
 
     partData = ""
     DO WHILE partData = ""
       partData = NCreadUntilLF()
     LOOP
     'NCoutDebug(partData)    
-    IF partData = "DONE" AND NOT dir THEN
-      NCserialOut("D" + NON_PATH.NC + "|8000", 1)
-      NCwifiDir(1-ACTIVE.NC, NON_PATH.NC)
-      POS.NC(1-ACTIVE.NC) = 0
-      CURSOR.NC(1-ACTIVE.NC) = 0
-      NCredrawPane(1-ACTIVE.NC)
+    IF partData = "DONE" THEN
+      tim = TIMER - tim
+      NCoutDebug(" TIME=" + STR$(tim/1000, 0, 1) + "s (" + STR$(fileLen/tim/1.024, 0, 1) +  " kB/s)")
+      IF NOT dir THEN
+        NCwifiDir(1-ACTIVE.NC, NON_PATH.NC)
+        POS.NC(1-ACTIVE.NC) = 0
+        CURSOR.NC(1-ACTIVE.NC) = 0
+        NCredrawPane(1-ACTIVE.NC)
+      ENDIF
     ENDIF
   ENDIF
 END SUB
+
+SUB NCfileFromServer(src AS STRING, dst AS STRING)
+  'copy file from server to local
+
+  LOCAL INTEGER partLen = 250 + ESP_ON.NC*7750
+  LOCAL STRING lineSerial, partData, dialog
+  LOCAL INTEGER i, fileLen, partNum, partRem, bufLen, dataLen, j
+  LOCAL INTEGER tim = TIMER
+
+  NCserialOut("R" + src + "|" + STR$(partLen), 1)
+  NCoutDebug("NCfileFromServer " + src + " " + dst)
+
+  partData = ""
+  DO WHILE partData = ""
+    partData = NCreadUntilLF()
+  LOOP
+  IF FIELD$(partData, 1, "|") = "READY" THEN
+    fileLen = VAL(FIELD$(partData, 2, "|"))
+    partNum = fileLen \ partLen
+    partRem = fileLen MOD partLen
+    'NCoutDebug(partData + "=" + STR$(partNum) + "*" + STR$(partLen) + "+" + STR$(partRem))
+    dialog = TUIwaitingON("COPY '" + NCgetName(src) + "' (SRV" + RIGHT.NC + "LOC, " + STR$(fileLen) + " bytes)")
+
+    NCserialOut("#START")         
+
+    OPEN dst FOR OUTPUT AS #2
+
+    FOR i = 1 TO partNum
+      IF LOC(#1) > 0 THEN lineSerial = INPUT$(LOC(#1), #1) 'empty garbage
+
+      NCserialOut("#NEXT")         
+      TUIwaitingProgress(dialog, 100 * i / partNum)
+      dataLen = 0
+      DO WHILE dataLen < partLen
+        bufLen = MIN(LOC(#1), 250, partLen - dataLen)
+        IF bufLen > 0 THEN
+          PRINT #2, INPUT$(bufLen, #1);
+          INC dataLen, bufLen
+        ENDIF
+      LOOP
+    NEXT i
+
+    IF partRem > 0 THEN
+      IF LOC(#1) > 0 THEN lineSerial = INPUT$(LOC(#1), #1)
+      NCserialOut("#NEXT")         
+      dataLen = 0
+      DO WHILE dataLen < partRem
+        bufLen = MIN(LOC(#1), 250, partRem - dataLen)
+        IF bufLen > 0 THEN
+          PRINT #2, INPUT$(bufLen, #1);
+          INC dataLen, bufLen
+        ENDIF
+      LOOP
+    ENDIF
+
+    CLOSE #2
+    NCserialOut("#DONE")
+    TUIwaitingOFF(dialog)
+    tim = TIMER - tim
+    NCoutDebug(" TIME=" + STR$(tim/1000, 0, 1) + "s (" + STR$(fileLen/tim/1.024, 0, 1) +  " kB/s)")
+  ELSE
+
+    NCoutDebug("Something strange received: " + partData)
+  ENDIF
+END SUB
+
 

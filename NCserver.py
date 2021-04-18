@@ -1,8 +1,25 @@
 #!/usr/bin/python3
 #Napoleon Server
-#Simple server for CMM2  Napoleon Commander over network, UDP and TCP used
+#Simple server for CMM2  Napoleon Commander over network (UDP used) or serial port
 #JirSoft, 2020
-VER = 'v0.26'
+VER = 'v0.28'
+
+#Here are the defaults used when no argument is given to the program 
+#********************************************************************************************
+WIFI = False #default is serial server (change to true when WiFi server mostly used)
+BASEDIR = "/Users/jirsoft/Documents/Maximite/NCserver/"	#used as server root
+espIP = "10.0.13.180"	#IP address of the ESP8266 inside of CMM2
+portName = '/dev/tty.usbserial-AD0JHH4Z' #serial port name
+portBaudrate = 691200 #serial baudrate (needs to be same as in Napoleon Commander)
+VERB_LEVEL = 1	#verbose level (0=least infos, 3=most)
+#********************************************************************************************
+# Possible arguments on program start
+# -s <server dir>				overrides BASEDIR
+# -i <IP address>				overrides espIP, also switch to WiFi server
+# -p <port name>				overrides portName, also switch to serial server
+# -v <verbose level>		overrides VERB_LEVEL
+# -h										prints out short help
+#********************************************************************************************
 
 import socket
 from datetime import datetime
@@ -11,10 +28,14 @@ import sys, getopt
 import os
 import shutil
 import time
+import serial
 
-espIP = "10.0.13.180"
 udpPort = 34701
-tcpPort = 34702
+LF = '\n'
+CURDIR = ""
+MODE = 0
+ACT_COMMAND = ''
+NC_FOUND = 0
 
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -27,18 +48,6 @@ def get_ip():
     finally:
         s.close()
     return IP
-    
-ncIP = get_ip()
-
-#used as server root, this server has no other access, can be given as command lineargument
-BASEDIR = "/Users/jirsoft/Documents/Maximite/NCserver/"
-VERB_LEVEL = 1
-
-LF = '\n'
-CURDIR = ""
-MODE = 0
-ACT_COMMAND = ''
-NC_FOUND = 0
 
 def out(s, level):
 	if VERB_LEVEL > level:
@@ -72,7 +81,7 @@ def unicodeTest(d):
 def lifeTest():
 	out('LIFE TEST', 0)
 	out("-> 'OK'", 1)
-	udpOut("OK")
+	devOut("OK")
 	
 def writeFile(d):
 	global MODE, copyTime, remain, buffer, fileLen, fileName, packNum, packCount
@@ -87,9 +96,25 @@ def writeFile(d):
 	remain = fileLen
 	buffer = bytes()
 	packNum = 0
-	MODE = 1
-	udpOut('READY')
+	out("-> 'READY'", 2)
+	devOut('READY')
 	copyTime = time.perf_counter()
+	if WIFI:
+		MODE = 1
+		
+	else:
+		while (len(buffer) < fileLen):
+			buffer += ser.read(min(ser.inWaiting(), fileLen - len(buffer)))
+			
+		out('-> DONE', 2)
+		serOut('DONE')
+		copyTime = time.perf_counter() - copyTime
+		newFile = open(fileName, "wb")
+		newFile.write(buffer)
+		newFile.close
+		ACT_COMMAND = ''	
+		out('\n  DONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(fileLen/copyTime/1024,1)) + ' kB/s)', 1)
+		
 
 def readFile(d):
 	fileName = BASEDIR + d.split('|')[0][4:]
@@ -101,23 +126,23 @@ def readFile(d):
 		packCount = partNum
 		if partRem > 0:
 			packCount += 1
-		out('SERVER to LOCAL ' + fileName + ', [' + str(fileLen) + ' bytes = ' + str(partNum) + '*' + str(partLen) + '+' + str(partRem) + '/' + str(packCount) + ']', 0)
+		out('SERVER to LOCAL ' + fileName + ', [' + str(fileLen) + ' bytes]', 0)
 		newFile = open(fileName, "rb")
 		buffer = newFile.read()
 		newFile.close
 		bufPos = 0
 		ret = 'READY|' + str(fileLen)
-		out(ret, 1)
-		udpOut(ret)
+		out(ret, 2)
+		devOut(ret)
 
-		if getUdpString() == '#START':
-			out('START ... ', 1)					
+		if getString() == '#START':
+			out('START ... ', 2)					
 			copyTime = time.perf_counter()
 			
 			packNum = 0
 					
 			while packNum < packCount:
-				srd = getUdpString()
+				srd = getString()
 				if srd == "#NEXT":
 					if VERB_LEVEL > 1:
 						print("{:.0%} ".format((packNum + 1)/packCount), end = '', flush=True)
@@ -126,14 +151,17 @@ def readFile(d):
 					if packNum < partNum:
 						bufEnd = bufStart + partLen
 					else:
-						bufEnd = bufStart + partRem				
-					udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+						bufEnd = bufStart + partRem
+					if WIFI:		
+						udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+					else:
+						ser.write(buffer[bufStart:bufEnd])
 					packNum += 1
 					
 				elif len(srd) > 7:
 					if srd[:7] == "#REPEAT":
 						packNum = int(srd[6:])
-						out("\nPACKET (" + str(packNum)+ ") was lost, repeating", -1)
+						out("\n  PACKET (" + str(packNum)+ ") was lost, repeating", -1)
 						bufStart = packNum * partLen
 						if packNum < partNum:
 							bufEnd = bufStart + partLen
@@ -143,13 +171,13 @@ def readFile(d):
 						packNum += 1
 					
 				else:
-					out("\nSERVER to LOCAL Error '" + srd + "'", -1)
+					out("\n  SERVER to LOCAL Error '" + srd + "'", -1)
 					return
 														
 
-			if getUdpString() == '#DONE':
+			if getString() == '#DONE':
 				copyTime = time.perf_counter() - copyTime
-				out('\nDONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(fileLen/copyTime/1024,1)) + ' kB/s)', 1)
+				out('\n  DONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(fileLen/copyTime/1024,1)) + ' kB/s)', 1)
 
 def copyItem(d):
 	out("COPY ITEM '" + d + "'", 0)
@@ -161,7 +189,7 @@ def copyItem(d):
 	else:
 		out('COPY FILE ' + src + ' to ' + dest, 1)
 		shutil.copy(src, dest)
-	udpOut('DONE')
+	devOut('DONE')
 
 def listDir(d):
 	global CURDIR
@@ -191,30 +219,38 @@ def listDir(d):
 			buffer += ret.encode('ASCII')
 			
 	ret = 'READY|' + str(len(buffer))
-	out('-> ' + ret, 1)
+	out('-> ' + ret, 2)
 	#print(buffer)
 	partNum = int(len(buffer) / partLen)
 	partRem = len(buffer) % partLen
 	packCount = partNum
 	if partRem > 0:
 		packCount += 1
-	udpOut(ret)
 
-	if getUdpString() == '#START':
-		out('<- #START', 1)
+	devOut(ret)
+
+	#if getString() == '#START':
+	if getString() == "#START":
+		out('<- #START', 2)
 		copyTime = time.perf_counter()
 		packNum = 0
 				
 		while packNum < packCount:
-			srd = getUdpString()
-			out('<- ' + srd, 1)
+			#srd = getString()
+			srd = getString()
+			out('<- ' + srd, 2)
 			if srd == "#NEXT":
 				bufStart = packNum * partLen
 				if packNum < partNum:
 					bufEnd = bufStart + partLen
 				else:
-					bufEnd = bufStart + partRem				
-				udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+					bufEnd = bufStart + partRem		
+				
+				if WIFI:		
+					udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+				else:
+					ser.write(buffer[bufStart:bufEnd])
+					
 				packNum += 1
 				
 			elif len(srd) > 7:
@@ -225,18 +261,23 @@ def listDir(d):
 					if packNum < partNum:
 						bufEnd = bufStart + partLen
 					else:
-						bufEnd = bufStart + partRem						
-					udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+						bufEnd = bufStart + partRem			
+					
+					if WIFI:			
+						udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+					else:
+						ser.write(buffer[bufStart:bufEnd])
 					packNum += 1
 				
 			else:
 				out("\nLIST DIR Error '" + srd + "'", -1)
 				return
 				
-		if getUdpString() == '#DONE':
-			out('<- #DONE', 1)
+		#if getString() == '#DONE':
+		if getString() == '#DONE':
+			out('<- #DONE', 2)
 			copyTime = time.perf_counter() - copyTime
-			out('\nDONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(len(buffer)/copyTime/1024,1)) + ' kB/s)', 1)
+			out('  DONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(len(buffer)/copyTime/1024,1)) + ' kB/s)', 1)
 
 def traverseDir(d):
 	global CURDIR
@@ -260,30 +301,33 @@ def traverseDir(d):
 			buffer += ret.encode('ASCII')
 			
 	ret = 'READY|' + str(len(buffer))
-	out('-> ' + ret, 1)
+	out('-> ' + ret, 2)
 	#print(buffer)
 	partNum = int(len(buffer) / partLen)
 	partRem = len(buffer) % partLen
 	packCount = partNum
 	if partRem > 0:
 		packCount += 1
-	udpOut(ret)
+	devOut(ret)
 
-	if getUdpString() == '#START':
-		out('<- #START', 1)
+	if getString() == '#START':
+		out('<- #START', 2)
 		copyTime = time.perf_counter()
 		packNum = 0
 				
 		while packNum < packCount:
-			srd = getUdpString()
-			out('<- ' + srd, 1)
+			srd = getString()
+			out('<- ' + srd, 2)
 			if srd == "#NEXT":
 				bufStart = packNum * partLen
 				if packNum < partNum:
 					bufEnd = bufStart + partLen
 				else:
-					bufEnd = bufStart + partRem				
-				udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+					bufEnd = bufStart + partRem	
+				if WIFI:	
+					udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+				else:
+					ser.write(buffer[bufStart:bufEnd])
 				packNum += 1
 				
 			elif len(srd) > 7:
@@ -295,51 +339,32 @@ def traverseDir(d):
 						bufEnd = bufStart + partLen
 					else:
 						bufEnd = bufStart + partRem						
-					udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+					if WIFI:	
+						udp.sendto(packNum.to_bytes(2,'little') + buffer[bufStart:bufEnd], (espIP, udpPort))
+					else:
+						ser.write(buffer[bufStart:bufEnd])
+
 					packNum += 1
 				
 			else:
 				out("\nTRAVERSE Error '" + srd + "'", -1)
 				return
 				
-		if getUdpString() == '#DONE':
-			out('<- #DONE', 1)
+		if getString() == '#DONE':
+			out('<- #DONE', 2)
 			copyTime = time.perf_counter() - copyTime
-			out('\nDONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(len(buffer)/copyTime/1024,1)) + ' kB/s)', 1)
-
-def _traverseDir(d):
-	out("TRAVERSE DIR '" + d + "'", 0)
-	CURDIR = d[4:]
-	if CURDIR != '':
-		if CURDIR[-1] != '/':
-			CURDIR += '/'
-	dir = Path(BASEDIR + CURDIR)
-	dirLen = len(BASEDIR)
-	trav = []
-	for dirpath, dirs, files in os.walk(dir):
-		trav.append('D' + dirpath[dirLen:])
-		for f in files:
-			trav.append ('F' + dirpath[dirLen:] + '/' + f + '|' + str(os.stat(dirpath + '/' + f).st_size))
-
-	ret = 'T' + str(len(trav)) + '|' + 'S:/' + CURDIR
-	out(ret, 1)
-	udpOut(ret)
-
-	for r in trav:
-		ret = r
-		out(ret, 1)
-		if getUdpString() == 'NEXT':
-			udpOut(ret)
+			out('  DONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(len(buffer)/copyTime/1024,1)) + ' kB/s)', 1)
 
 def makeDir(d):
 	dirName = BASEDIR + d[4:]
 	out('MAKE DIR ' + dirName, 0)
 	if not os.path.exists(dirName):
 		os.mkdir(dirName)
-		udpOut('DONE')
+		devOut('DONE')
+		out("-> DONE", 2)
 	else:
-		udpOut('ERRORDirecory exists')
-		out('MAKE DIR Error: ' + dirName + ' exists', -1)
+		devOut('ERRORDirecory exists')
+		out('  MAKE DIR Error: ' + dirName + ' exists', -1)
 
 def renameItem(d):
 	srcName = BASEDIR + d.split('|')[0][4:]
@@ -355,25 +380,19 @@ def killItem(d):
 			try:
 				shutil.rmtree(itemName)
 			except OSError as e:
-				out("KILL DIR Error: " + itemName + " : " + e.strerror, -1)
+				out("  KILL DIR Error: " + itemName + " : " + e.strerror, -1)
 							
 		else:
 			try:
 				os.remove(itemName)
 			except OSError as e:
-				out("KILL FILE Error: " + itemName + " : " + e.strerror, -1)
+				out("  KILL FILE Error: " + itemName + " : " + e.strerror, -1)
 
 def udpOut(s):
 	try:
 		udp.sendto((s + "\n").encode('ASCII'), (espIP, udpPort))
 	except:
 		out("udpOut Error", -1)		
-
-def tcpOut(s):
-	try:
-		tcp.sendall((s + "\n").encode('ASCII'))
-	except:
-		out("tcpOut Error", -1)		
 
 def getUdpString():
 	try:
@@ -383,31 +402,64 @@ def getUdpString():
 			
 	except socket.timeout:
 		return("")
+
+def serOut(s):
+	try:
+		ser.write((s + "\n").encode('ASCII'))
 		
+	except:
+		out("serOut Error", -1)		
+
+def getSerString():
+	data = ser.read_until()[:-1]
+	if data:
+		#print("DEBUG: SERIAL DATA='" + data.decode('ASCII') + "', " + str(len(data)))
+		return(data.decode('ASCII'))
+	else:
+		return("")			
+
+def devOut(s):
+	if WIFI:
+		udpOut(s)
+	else:
+		serOut(s)
+		
+def getString():
+	if WIFI:
+		return(getUdpString())
+	else:
+		return(getSerString())
+	
 def main(argv):
-	global BASEDIR, espIP, VERB_LEVEL
+	global BASEDIR, espIP, VERB_LEVEL, WIFI
 	
 	try:
-		opts, args = getopt.getopt(argv, "hs:i:v:", ["ip=","ip=", "verbose="])
+		opts, args = getopt.getopt(argv, "hs:i:v:p:", ["help", "serverdir=", "ip=", "port=", "verbose="])
 		
 	except getopt.GetoptError:
 		print(sys.argv[1])
-		print(sys.argv[0] + ' -s <serverdir> -i <CMM2 IP> -v <verbose level>')
+		print(sys.argv[0] + ' -s <serverdir> -p <serial port> -v <verbose level> (for serial server, default)')
+		print(sys.argv[0] + ' -s <serverdir> -i <CMM2 IP> -v <verbose level> (for WiFi server)')
 		sys.exit()
 
 	for opt, arg in opts:
-		if opt == '-h':
-			print("Napoleon WiFi server " + VER)
+		if opt in ("-h", "--help"):
+			print("Napoleon server " + VER)
 			print()
-			print(sys.argv[0] + ' -s <serverdir> -i <IP> -b <baudrate>')
+			print(sys.argv[0] + ' -s <serverdir> -i <CMM2 IP> -v <verbose level>')
+			print(sys.argv[0] + ' -s <serverdir> -p <port> -v <verbose level>')
 			print('  <serverdir>')
 			print('    base directory for NCserver, Napoleon Commander on CMM2 see just inside of this')
+			print('    (Napoleon Commander on CMM2 see just inside of this)')
 			print()
 			print('  <IP>')
-			print('    IP address of ESP on CMM2')
+			print('    IP address of ESP on CMM2 (WiFi server)')
+			print()
+			print('  <port>')
+			print('    serial port for connection with CMM2 (serial server)')
 			print()
 			print('  <verbose>')
-			print('    verbose level (0=min, 3 = max)')
+			print('    verbose level (0=min, 3 = max), default 1')
 			print()
 			
 			sys.exit()
@@ -420,39 +472,65 @@ def main(argv):
 		 
 		elif opt in ("-i", "--ip"):
 			espIP = arg
+			WIFI = True
 
 		elif opt in ("-v", "--verbose"):
 			if (int(arg) >= 0) and (int(arg) <= 3):
 				VERB_LEVEL = int(arg)
+				
+		elif opt in ("-p", "--port"):
+			portName = arg
+			WIFI = False
+
 if __name__ == "__main__":
 	main(sys.argv[1:])
 
-udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-udp.settimeout(1)
-udp.bind((ncIP, udpPort))
+if WIFI:
+	ncIP = get_ip()
+	udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+	udp.settimeout(1)
+	udp.bind((ncIP, udpPort))
 
-tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-tcp.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+	udpOut("NCudpServer")
+	
+	out(sys.argv[0]  + " -s '" + BASEDIR + "' -i '" + espIP + "' -v " + str(VERB_LEVEL), -1)
+	out('Napoleon Server ' + VER + ' is listening on ' + ncIP + ':' + str(udpPort), -1)
+	out("Looking for NC...", -1)
+	
+else:
+	ser = serial.Serial(
+		port = portName, #MacOS, CMM2 deluxe
+		baudrate = portBaudrate,
+		parity=serial.PARITY_NONE,
+		stopbits=serial.STOPBITS_ONE,
+		bytesize=serial.EIGHTBITS,
+		timeout=10
+		)
+		
+	nothing = ser.read(ser.inWaiting())
+	
+	out(sys.argv[0]  + " -s '" + BASEDIR + "' -p '" + portName + "' -v " + str(VERB_LEVEL), -1)
+	out('Napoleon Server ' + VER + ' is listening on serial port', -1)
 
-udpOut("NCudpServer")
-out (sys.argv[0]  + " -s '" + BASEDIR + "' -i '" + espIP + "' -v " + str(VERB_LEVEL), -1)
-out ('Napoleon WiFi Server ' + VER + ' is listening on ' + ncIP + ':' + str(udpPort), -1)
-out("Looking for NC...", -1)
 while (True):
 	try:
-		data, address = udp.recvfrom(10000)
+		if WIFI:
+			data, address = udp.recvfrom(10000)
+		else:
+			data = ser.read_until()
+			
 		if data:
 			if MODE == 0:
 				sData = data.decode('ASCII')[:-1]
 				if sData != "":
-					out("<- '" + sData + "'", 1)
+					out("<- '" + sData + "'", 2)
 	
 					#ESP on CMM2 found NCudpServer
 					if sData == 'NConCMM2':
 						NC_FOUND = 1
-						out('Napoleon Commander found NCwifiServer', -1)
+						out('Napoleon Commander found NCserver', -1)
 						udp.settimeout(None)
 				
 					#debug data
@@ -512,13 +590,18 @@ while (True):
 						ACT_COMMAND = 'KILL ITEM'
 						killItem(sData)
 						ACT_COMMAND = ''
-		
+						
+					#unknown command
+					else:
+						out("Unknown command '" + sData + "', " + str(len(sData)), 0)
+						
 				else:
-					udpOut("NCudpServer")
+					if WIFI:
+						udpOut("NCudpServer")
 			
 			else:
 				if packNum < packCount:
-					ctrlNum = int.from_bytes(data[0:2], byteorder='little')
+					ctrlNum = int.from_bytes(data[0:2], byteorder='little')						
 					udpOut(str(packNum))
 					if ctrlNum == packNum:
 						buffer += data[2:]
@@ -526,8 +609,8 @@ while (True):
 						packNum += 1
 
 					else:
-						out("LOST PACKET (expected " + str(packNum) + ", got " + str(ctrlNum) + ")", -1)
-					
+						out("  LOST PACKET (expected " + str(packNum) + ", got " + str(ctrlNum) + ")", -1)
+											
 				else:
 					ctrlNum = int.from_bytes(data[0:2], byteorder='little')
 					udpOut(str(packNum))
@@ -537,24 +620,24 @@ while (True):
 						packNum += 1
 
 					else:
-						out("LOST PACKET (expected " + str(packNum) + ", got " + str(ctrlNum) + ")", -1)
-
-				
-
+						out("  LOST PACKET (expected " + str(packNum) + ", got " + str(ctrlNum) + ")", -1)
+					
 				if VERB_LEVEL > 1:
 						print("{:.0%} ".format(packNum/packCount), end = '', flush=True)
-				
+		
 				#print(ctrlNum, packNum, packCount)		
 				if packNum == packCount:
-					udpOut('DONE')
+					out("-> DONE", 2)
+					devOut('DONE')
 					copyTime = time.perf_counter() - copyTime
 					newFile = open(fileName, "wb")
 					newFile.write(buffer)
 					newFile.close
 					MODE = 0
 					ACT_COMMAND = ''	
-					out('\nDONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(fileLen/copyTime/1024,1)) + ' kB/s)', 1)
-
+					out('\n  DONE in ' + str(round(copyTime, 1)) + ' sec (' + str(round(fileLen/copyTime/1024,1)) + ' kB/s)', 1)
+							
+					
 	except socket.timeout:
 		if ACT_COMMAND == '':
 			if not NC_FOUND:
@@ -564,6 +647,6 @@ while (True):
 		else:
 			out("NCudpServer timeout in '" + ACT_COMMAND + "'", -1)			
 			if ACT_COMMAND == 'WRITE DATA':
-				out("WRITE DATA canceled", -1)
+				out("  WRITE DATA canceled", -1)
 				MODE = 0
 				ACT_COMMAND = ''
