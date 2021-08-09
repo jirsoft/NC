@@ -1,5 +1,5 @@
 'Napoleon Commander
-CONST VERSION.NC = "1.26"
+CONST VERSION.NC = "1.33"
 
 #DEFINE "DBG ", "'"
 '#DEFINE "DBG ", ""
@@ -36,8 +36,13 @@ CONST RIGHT.NC = " " + CHR$(227) + " " 'right arrow
 CONST FILECHARS.NC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()_-."
 DIM STRING WIFICHARS.NC = ""
 CONST MAX_ITEMS.NC = 2000 'max number of items in pane
-CONST MAX_ROWS.NC = 32   'max row in list display
-CONST EDIT_ROWS.NC = 35
+DIM INTEGER OFFSET.NC = 0
+DIM INTEGER MAX_COLS.NC = 46
+DIM INTEGER EDIT_ROWS.NC = 35
+DIM INTEGER MAX_ROWS.NC = 32   'max row in list display
+DIM INTEGER WITHOUT2.NC = 568
+DIM INTEGER HALF.NC = 400
+DIM INTEGER QUART.NC = 200
 CONST ESC.NC = CHR$(27)
 CONST ENTER.NC = CHR$(10)
 CONST CR.NC = CHR$(13)
@@ -84,8 +89,8 @@ DIM STRING MANUAL.NC = NC_PATH.NC + "MANUAL.TXT"
 DIM STRING ACT_PATH.NC, NON_PATH.NC 'active and non-active path (selected and not selected)
 DIM STRING SEL_TYPE.NC, SEL_NAME.NC 'D or F, name without prefix
 
-DIM STRING MENU.NC(11) LENGTH 7 'menu
-DIM INTEGER EN_MENU.NC(11)      'menu enabled
+DIM STRING MENU.NC(11, 1) LENGTH 20     'menu on screen 
+DIM INTEGER EN_MENU.NC(11, 1)      'menu enabled
 DIM INTEGER CURSOR.NC(1)        'cursor position in pane
 DIM INTEGER POS.NC(1)           'items list position in pane
 DIM INTEGER COUNT.NC(1)         'number of items in pane
@@ -146,42 +151,24 @@ DO
     IF ALT.NC <> ALT_OLD.NC THEN
       ALT_OLD.NC = ALT.NC
       IF ALT.NC THEN
-        NCsetMenu(0, "SourLP", 1)
         NCdrawMenuPart(1)
-        NCsetMenu(1, "SourRP", 1)
         NCdrawMenuPart(2)
-        NCsetMenu(2, "VieHEX", 1)
         NCdrawMenuPart(3)
-        NCsetMenu(3, "HlpBAS", 1)
         NCdrawMenuPart(4)
-        NCsetMenu(4, "Move", 1)
         NCdrawMenuPart(5)
-        NCsetMenu(8, "Comprs", 1)
         NCdrawMenuPart(9)
-        NCsetMenu(9, "QuitNC", 1)
         NCdrawMenuPart(10)
-        DBG NCsetMenu(10, "DEBUG", 1)
         DBG NCdrawMenuPart(11)
-        NCsetMenu(11,"WiFi", ESP.NC)
         NCdrawMenuPart(12)
       ELSE
-        NCsetMenu(0, "Help", 1)
         NCdrawMenuPart(1)
-        NCsetMenu(1, "GetInf", 1)
         NCdrawMenuPart(2)
-        NCsetMenu(2, "Viewer", 1)
         NCdrawMenuPart(3)
-        NCsetMenu(3, "EdiHEX", 1)
         NCdrawMenuPart(4)
-        NCsetMenu(4, "Copy", 1)
         NCdrawMenuPart(5)
-        NCsetMenu(8, "MakMAR", 1)
         NCdrawMenuPart(9)
-        NCsetMenu(9, "About", 1)
         NCdrawMenuPart(10)
-        NCsetMenu(10, "Config", 1)
         NCdrawMenuPart(11)
-        NCsetMenu(11,"LP=RP", 1)
         NCdrawMenuPart(12)
       ENDIF
     ENDIF
@@ -210,15 +197,18 @@ SUB NCespTest
       IF LEFT$(ESP_VERSION.NC, 5) = "ESP v" THEN
         ESP_ON.NC = 1
         ESP.NC = 1
+        EN_MENU.NC(11,1) = 1
       ELSE
         ESP_ON.NC = 0
         ESP.NC = 0
         ESP_VERSION.NC = ""
+        EN_MENU.NC(11,1) = 0
       ENDIF
     ELSE
       ESP_ON.NC = 0
       ESP.NC = 0
       ESP_VERSION.NC = ""
+      EN_MENU.NC(11,1) = 0
     ENDIF
   'CLOSE #1
   TUIwaitingOFF(dialog)
@@ -318,9 +308,9 @@ SUB NCheader(side AS INTEGER, s AS STRING)
   LOCAL STRING ss = s
   IF LEN(ss)>46 THEN ss = LEFT$(ss,45)+"~"
   IF side = ACTIVE.NC THEN
-    TEXT 400*side+200,0," " + ss + " ", "CT",8,,RGB(BLUE),RGB(WHITE)
+    TEXT HALF.NC*side+QUART.NC,0," " + ss + " ", "CT",8,,RGB(BLUE),RGB(WHITE)
   ELSE
-    TEXT 400*side+200,0," " + ss + " ", "CT",8,,RGB(WHITE),RGB(BLUE)
+    TEXT HALF.NC*side+QUART.NC,0," " + ss + " ", "CT",8,,RGB(WHITE),RGB(BLUE)
   ENDIF
 END SUB
 
@@ -445,7 +435,7 @@ SUB NCgetInfo(filePath AS STRING)
         DO WHILE NOT EOF(#4)
           IF lin = "" THEN LINE INPUT #4, lin      
           lin = NCtrim(lin)      
-          IF LEFT$(lin,4) = "SUB " OR LEFT$(lin,9) = "FUNCTION " THEN
+          IF UCASE$(LEFT$(lin,4)) = "SUB " OR UCASE$(LEFT$(lin,9)) = "FUNCTION " THEN
             ?#3, lin
             
             IF NOT EOF(#4) THEN
@@ -533,143 +523,6 @@ SUB NCgetInfo(filePath AS STRING)
   END SELECT
 END SUB
 
-SUB NCconfig
-  'configure NC
-
-  LOCAL STRING txt = "External viewers enabled"
-        txt = txt + ",External actions enabled"
-        txt = txt + ",ESC to parent dir"
-        txt = txt + ",DIRs before FILEs"
-        txt = txt + ",TEXT VIEWER fallback (HEX else)"
-        txt = txt + ",HIGH COLOR mode"
-        txt = txt + ",FAST SERIAL SERVER (691200 baud)"
-        txt = txt + ",ESP8266 installed"
-     
-  LOCAL INTEGER sel = NCconfigPack()
-  LOCAL INTEGER oldSel = sel
-  sel = TUIselect("CONFIGURATION",txt,sel)
-  NCconfigUnpack(sel)
-  
-  oldSel = sel XOR oldSel 'difference between OLD and NEW settings  
-  IF oldSel AND 32 THEN
-    IF CFG_HighColor.NC THEN
-      MODE 1,16
-    ELSE
-      MODE 1,8
-    ENDIF
-    FONT 8
-    LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
-  ENDIF
-
-  IF oldSel AND 64 THEN 
-    IF CFG_FastSerial.NC THEN
-      SERIAL_INIT.NC = "COM3:691200,8050"
-    ELSE
-      SERIAL_INIT.NC = "COM3:230400,8050"
-    ENDIF
-    IF SERIAL_ON.NC THEN CLOSE #1
-    SERIAL_ON.NC = 0
-    NULL_I.NC = NCserialOK()
-  ENDIF
-  
-  IF oldSel AND 128 THEN
-    IF CFG_ESP.NC THEN
-      IF SERIAL_ON.NC THEN
-        ON ERROR SKIP
-        CLOSE #1
-        SERIAL_ON.NC = 0
-      ENDIF
-      NCespTest
-      IF ESP.NC THEN
-        NCespWifiTest
-      ENDIF
-    ELSE
-      IF ESP_ON.NC THEN
-        ON ERROR SKIP
-        CLOSE #1
-        SERIAL_ON.NC = 0
-      ENDIF
-      WIFI.NC = 0
-      ESP.NC = 0
-      ESP_VERSION.NC = ""
-    ENDIF
-  ENDIF
-  IF (oldSel AND 8) OR (oldSel AND 32) THEN 'changed MODE or items sorting
-    NCchangeDir(0,PATH.NC(0))
-    NCchangeDir(1,PATH.NC(1))
-    NCdrawMenu
-    NCdrawCL(ACT_PATH.NC)
-    NCcursor(ACTIVE.NC,1)
-  ENDIF
-  IF oldSel <> 0 THEN 
-    CONFIG.NC = sel
-    NCconfigSave(sel)
-  ENDIF
-END SUB
-
-FUNCTION NCconfigPack() AS INTEGER
-  'pack config into integer
-
-  NCconfigPack = CFG_ExtView.NC + 2*CFG_ExtAct.NC + 4*CFG_ESCup.NC
-  NCconfigPack = NCconfigPack + 8*CFG_DirFil.NC + 16*CFG_TXTfb.NC + 32*CFG_HighColor.NC
-  NCconfigPack = NCconfigPack + 64*CFG_FastSerial.NC + 128*CFG_ESP.NC
-END FUNCTION
-
-SUB NCconfigSave(sel AS INTEGER)
-  'save config
-  OPEN NC_PATH.NC + "NC.CFG" FOR OUTPUT AS #3
-  ?#3,BIN$(sel)
-  IF ESP_SSID.NC <> "" THEN
-    ?#3, ESP_SSID.NC
-  ENDIF
-  IF ESP_PASS.NC <> "" THEN
-    ?#3, ESP_PASS.NC
-  ENDIF
-  CLOSE #3
-END SUB
-
-SUB NCconfigLoad
-  'load config
-
-  LOCAL STRING sCfg
-  ON ERROR SKIP
-  OPEN NC_PATH.NC + "NC.CFG" FOR INPUT AS #3
-  IF MM.ERRNO = 0 THEN
-    LINE INPUT #3, sCfg
-    CONFIG.NC = VAL("&b" + sCfg)
-
-    NCconfigUnpack(CONFIG.NC)
-    IF NOT EOF(#3) THEN
-      LINE INPUT #3, ESP_SSID.NC
-    ENDIF
-    IF NOT EOF(#3) THEN
-      LINE INPUT #3, ESP_PASS.NC
-    ENDIF
-
-    CLS RGB(NOTBLACK)
-    CLOSE #3
-  ENDIF
-  IF CFG_FastSerial.NC THEN
-    SERIAL_INIT.NC = "COM3:691200,8050"
-  ELSE
-    SERIAL_INIT.NC = "COM3:230400,8050"
-  ENDIF
-  IF CFG_ESP.NC THEN
-    FONT.TUI = 1
-    NCespTest
-    IF ESP.NC THEN
-      NCespWifiTest
-    ELSE
-      CFG_ESP.NC = 0
-    ENDIF
-    FONT.TUI = 8
-  ELSE
-    ESP.NC = 0
-    ESP_ON.NC = 0
-    ESP_VERSION.NC = ""
-  ENDIF
-END SUB
-
 SUB NCwifi
   IF ESP.NC THEN
     LOCAL STRING wifi = "Connect to ...", ssid, pass
@@ -692,7 +545,7 @@ SUB NCwifi
           IF WIFI.NC THEN
             ESP_SSID.NC = ssid
             ESP_PASS.NC = pass
-            NCconfigSave(CONFIG.NC)
+            NCconfigSave'(CONFIG.NC)
           ENDIF
           TUIwaitingOFF(dialog)
         ENDIF        
@@ -725,19 +578,6 @@ SUB NCwifi
 
     END SELECT 
   ENDIF
-END SUB
-
-SUB NCconfigUnpack(sel AS INTEGER)
-  'unpack config from integer
-
-  CFG_ExtView.NC = (sel AND 1) > 0 
-  CFG_ExtAct.NC = (sel AND 2) > 0
-  CFG_ESCup.NC = (sel AND 4) > 0
-  CFG_DirFil.NC = (sel AND 8) > 0
-  CFG_TXTfb.NC = (sel AND 16) > 0
-  CFG_HighColor.NC = (sel AND 32) > 0
-  CFG_FastSerial.NC = (sel AND 64) > 0 
-  CFG_ESP.NC = (sel AND 128) > 0 
 END SUB
 
 SUB NCfindFirstChar(ch AS STRING)
@@ -1025,10 +865,15 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "BMP"
       CLOCK.NC = 0
       CLS RGB(NOTBLACK)
+      ON ERROR SKIP
       LOAD BMP p+s
-      TUIwaitForNoKey
-      TUIwaitForKey
-      TUIwaitForNoKey
+      IF MM.ERRNO=0 THEN
+        TUIwaitForNoKey
+        TUIwaitForKey
+        TUIwaitForNoKey
+      ELSE
+        TUIwarning("BMP VIEW ERROR", MM.ERRMSG$)
+      ENDIF
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -1037,10 +882,15 @@ SUB NCaction(p AS STRING, s AS STRING)
     CASE "JPG"
       CLOCK.NC = 0
       CLS RGB(NOTBLACK)
+      ON ERROR SKIP
       LOAD JPG p+s
-      TUIwaitForNoKey
-      TUIwaitForKey
-      TUIwaitForNoKey
+      IF MM.ERRNO=0 THEN
+        TUIwaitForNoKey
+        TUIwaitForKey
+        TUIwaitForNoKey
+      ELSE
+        TUIwarning("JPG VIEW ERROR", MM.ERRMSG$)
+      ENDIF
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
@@ -1051,9 +901,9 @@ SUB NCaction(p AS STRING, s AS STRING)
       CLS RGB(NOTBLACK)
       ON ERROR SKIP
       LOAD PNG p+s
-      IF MM.ERRNO = 0 THEN
+      IF MM.ERRNO=0 THEN
         TUIwaitForNoKey
-        TUIwaitForKey
+    TUIwaitForKey
         TUIwaitForNoKey
       ELSE
         TUIwarning("PNG VIEW ERROR", MM.ERRMSG$)
@@ -1068,14 +918,18 @@ SUB NCaction(p AS STRING, s AS STRING)
       CLS RGB(NOTBLACK)
       ON ERROR SKIP
       LOAD GIF p+s
-      TUIwaitForNoKey
-      TUIwaitForKey
-      TUIwaitForNoKey
+      IF MM.ERRNO=0 THEN
+        TUIwaitForNoKey
+        TUIwaitForKey
+        TUIwaitForNoKey
+      ELSE
+        TUIwarning("GIF VIEW ERROR", MM.ERRMSG$)
+      ENDIF
       NCredrawPane(0)
       NCredrawPane(1)  
       NCcursor(ACTIVE.NC,1)
       NCdrawMenu
-
+    
     CASE "MAR"
       NCunMAR(p + s)
 
@@ -1118,20 +972,21 @@ SUB NCredrawPane(side AS INTEGER)
   LOCAL STRING short = PATH.NC(side)
   LOCAL INTEGER i, fcol = RGB(WHITE)
 
-  IF LEN(short)>46 THEN short = LEFT$(short,45)+"~"
+  IF LEN(short)>MAX_COLS.NC THEN short = LEFT$(short,MAX_COLS.NC-1)+"~"
 
   PAGE WRITE 1
-  BOX 400*side,0,400,568,0,,RGB(NOTBLACK)
-  BOX 400*side,0,400,566,0,,RGB(BLUE)
-  BOX 400*side+1,0+6,400-3,568-15,2,RGB(WHITE),RGB(BLUE)
+  BOX HALF.NC*side,0,HALF.NC,WITHOUT2.NC,0,,RGB(NOTBLACK)
+  BOX HALF.NC*side,0,HALF.NC,WITHOUT2.NC-2,0,,RGB(BLUE)
+  BOX HALF.NC*side+1,0+6,HALF.NC-3,WITHOUT2.NC-15,2,RGB(WHITE),RGB(BLUE)
+
   IF side = ACTIVE.NC THEN
     ACT_PATH.NC = PATH.NC(side)
-    TEXT 400*side+200,0," "+short+" ","CT",8,,RGB(BLUE),RGB(WHITE)
+    TEXT HALF.NC*side+QUART.NC,0," "+short+" ","CT",8,,RGB(BLUE),RGB(WHITE)
   ELSE
     NON_PATH.NC = PATH.NC(side)
-    TEXT 400*side+200,0," "+short+" ","CT",8,,RGB(WHITE),RGB(BLUE)
+    TEXT HALF.NC*side+QUART.NC,0," "+short+" ","CT",8,,RGB(WHITE),RGB(BLUE)
   ENDIF
-  TEXT 400*side+200,600-52,NCcounter(side),"CT",,,RGB(WHITE),RGB(BLUE)
+  TEXT HALF.NC*side+QUART.NC,WITHOUT2.NC,NCcounter(side),"CT",,,RGB(WHITE),RGB(BLUE)
   
   FOR i = POS.NC(side) TO MIN(COUNT.NC(side), MAX_ROWS.NC+POS.NC(side))
     STR.NC = ITEM.NC(side,i)
@@ -1143,10 +998,10 @@ SUB NCredrawPane(side AS INTEGER)
     IF MID$(STR.NC,2,1)="." THEN
       fcol = RGB(RED) 'hidden file/dir
     ENDIF
-    TEXT 400*side+8, 16*(i-POS.NC(side)+1),NCout(ITEM.NC(side,i)),,,,fcol,RGB(BLUE)
+    TEXT HALF.NC*side+8, 16*(i-POS.NC(side)+1),NCout(ITEM.NC(side,i)),,,,fcol,RGB(BLUE)
   NEXT i
   PAGE WRITE 0
-  BLIT 400*side,0,400*side,0,400,568,1
+  BLIT HALF.NC*side,0,HALF.NC*side,0,HALF.NC,WITHOUT2.NC,1
 END SUB
 
 FUNCTION NCout(s AS STRING) AS STRING
@@ -1158,22 +1013,22 @@ END FUNCTION
 FUNCTION NCname(f AS STRING) AS STRING
   'prepare name, make it shorter when needed
 
-  LOCAL INTEGER l = LEN(f)
+  LOCAL INTEGER l = LEN(f), maxl = MAX_COLS.NC - 23
   LOCAL STRING ex = NCgetExtension(f)
-
-  IF l > 23 THEN
+  
+  IF l > maxl THEN
     IF ex <> "" THEN
-      NCname = LEFT$(f, 18) + "~."
+      NCname = LEFT$(f, maxl-5) + "~."
       IF LEN(ex) > 3 THEN
         NCname = NCname + "~" + RIGHT$(ex, 2)
       ELSE
         NCname = NCname + RIGHT$("   " + ex, 3)
       ENDIF
     ELSE
-      NCname = LEFT$(f, 22) + "~"
+      NCname = LEFT$(f, maxl-1) + "~"
     ENDIF
   ELSE
-    NCname = LEFT$(f + SPACE$(23), 23)
+    NCname = LEFT$(f + SPACE$(maxl), maxl)
   ENDIF
 END FUNCTION
 
@@ -1272,29 +1127,29 @@ END FUNCTION
 SUB NCclock
   SELECT CASE CLOCK.NC
     CASE 1
-      TEXT 800 - 5*8, 568, NCdigital(LEFT$(TIME$, 5)), "LT", 8,, RGB(CYAN), RGB(NOTBLACK)
+      TEXT MM.HRES - 5*8, WITHOUT2.NC, NCdigital(LEFT$(TIME$, 5)), "LT", 8,, RGB(CYAN), RGB(NOTBLACK)
       IF WIFI.NC THEN
-        TEXT 0, 568, CHR$(231), "LT", 8,, ICONS.NC, RGB(NOTBLACK)
+        TEXT 0, WITHOUT2.NC, CHR$(231), "LT", 8,, ICONS.NC, RGB(NOTBLACK)
       ELSE
-        TEXT 0, 568, " ", "LT", 8,, RGB(CYAN), RGB(NOTBLACK)
+        TEXT 0, WITHOUT2.NC, " ", "LT", 8,, RGB(CYAN), RGB(NOTBLACK)
       ENDIF
 
     CASE 2
-      TEXT 800 - 6*8, 600-16, " " + NCdigital(LEFT$(TIME$, 5)),"LT", 8,, RGB(WHITE), RGB(NOTBLACK)
+      TEXT MM.HRES - 6*8, MM.VRES-16, " " + NCdigital(LEFT$(TIME$, 5)),"LT", 8,, RGB(WHITE), RGB(NOTBLACK)
   END SELECT
 END SUB
 
 SUB NCdrawCL(p AS STRING)
   'outputs command line
 
-  LOCAL STRING pp = LEFT$(p, 100-9)
-  BOX 8, 568, 800 - 6*8, 16, 0,, RGB(NOTBLACK)
-  TEXT 4*8, 568,p,"LT",8,,RGB(WHITE),RGB(NOTBLACK)
+  LOCAL STRING pp = LEFT$(p, (MM.HRES\8)-9)
+  BOX 8, WITHOUT2.NC, MM.HRES - 6*8, 16, 0,, RGB(NOTBLACK)
+  TEXT 4*8, WITHOUT2.NC,p,"LT",8,,RGB(WHITE),RGB(NOTBLACK)
   IF HIDDEN.NC THEN
-    TEXT 8, 568, CHR$(230), "LT", 8,, ICONS.NC, RGB(NOTBLACK)
+    TEXT 8, WITHOUT2.NC, CHR$(230), "LT", 8,, ICONS.NC, RGB(NOTBLACK)
   ENDIF
   IF NOT UNSORT.NC THEN
-    TEXT 16, 568, CHR$(229), "LT", 8,, ICONS.NC, RGB(NOTBLACK)
+    TEXT 16, WITHOUT2.NC, CHR$(229), "LT", 8,, ICONS.NC, RGB(NOTBLACK)
   ENDIF
   CLOCK.NC = 1
 END SUB
@@ -1306,7 +1161,7 @@ SUB NCcursor(side AS INTEGER, show AS INTEGER)
   LOCAL INTEGER hid = MID$(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side)),2,1)="." 
   LOCAL INTEGER fcol
 
-  IF LEN(short)>46 THEN short = LEFT$(short,45)+"~"
+  IF LEN(short)>MAX_COLS.NC THEN short = LEFT$(short,MAX_COLS.NC-1)+"~"
   
   IF LEFT$(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side)),1) = "D" THEN
     fcol = RGB(YELLOW) 'dir
@@ -1316,25 +1171,24 @@ SUB NCcursor(side AS INTEGER, show AS INTEGER)
   IF show THEN
     'TEXT 400*side+200,0," "+short+" ","CT",,,RGB(BLUE),RGB(WHITE)
     IF hid THEN
-      TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),RGB(RED)
+      TEXT HALF.NC*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),RGB(RED)
     ELSE
-      TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),fcol
+      TEXT HALF.NC*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),fcol
     ENDIF
     COMPLETE.NC = ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))
     SELECTED.NC = FIELD$(COMPLETE.NC, 1, "|")
     SEL_NAME.NC = MID$(SELECTED.NC, 2)
     SEL_TYPE.NC = LEFT$(SELECTED.NC, 1)
     NCdrawCL(ACT_PATH.NC + SEL_NAME.NC)        
-    TEXT 400*side+200,600-52,NCcounter(side),"CT",,,RGB(WHITE),RGB(BLUE)
+    TEXT HALF.NC*side+QUART.NC,WITHOUT2.NC-16,NCcounter(side),"CT",,,RGB(WHITE),RGB(BLUE)
     ACT_PATH.NC = PATH.NC(side)
     NON_PATH.NC = PATH.NC(1 - side)
 
   ELSE
-    'TEXT 400*side+200,0," "+short+" ","CT",,,RGB(WHITE),RGB(BLUE)
     IF hid THEN
-      TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(RED),RGB(BLUE)
+      TEXT HALF.NC*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(RED),RGB(BLUE)
     ELSE
-      TEXT 400*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,fcol,RGB(BLUE)
+      TEXT HALF.NC*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,fcol,RGB(BLUE)
     ENDIF
   ENDIF  
 END SUB
@@ -1344,41 +1198,6 @@ FUNCTION NCcounter(side AS INTEGER) AS STRING
 
   NCcounter = " " + STR$(1+POS.NC(side)+CURSOR.NC(side))+"/"+STR$(1+COUNT.NC(side))+" "
 END FUNCTION
-
-SUB NCsort(side AS INTEGER)
-  'sort dir (need speed up, SORT()???)
-
-  IF UNSORT.NC THEN EXIT SUB
-  LOCAL INTEGER mi, i, j
-  LOCAL STRING ms
-  
-  FOR i = 1 TO COUNT.NC(side)
-    mi = i - 1
-    ms = ITEM.NC(side,mi)
-    FOR j = i TO COUNT.NC(side)
-      IF CFG_DirFil.NC THEN
-        IF UCASE$(ITEM.NC(side,j)) < UCASE$(ms) THEN
-          mi = j
-          ms = ITEM.NC(side,mi)
-        ENDIF
-      ELSE
-        IF UCASE$(MID$(ITEM.NC(side,j),2)) < UCASE$(MID$(ms,2)) THEN
-          mi = j
-          ms = ITEM.NC(side,mi)
-        ENDIF
-      ENDIF
-    NEXT j
-    ITEM.NC(side,mi) = ITEM.NC(side,i-1)
-    ITEM.NC(side,i-1) = ms 
-  NEXT i
-  ENDIF
-END SUB
-
-SUB NCsetChar(s AS STRING, p AS INTEGER, c AS STRING)
-  'MID$ set
-
-  s = LEFT$(s,p-1) + c + MID$(s, p+1)
-END SUB
 
 SUB NCerror(title AS STRING)
   'shows BASIC error
@@ -1482,7 +1301,7 @@ SUB NCviewHEX(filePath AS STRING)
   'simple hex viewer
 
   CLOCK.NC = 2
-  LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, change = 0, b, po = 0, i, ln, cx, cy
+  LOCAL INTEGER firstRow = 16+OFFSET.NC, row = 0, cnt = 0, change = 0, b, po = 0, i, ln, cx, cy
   LOCAL STRING li,k
 
   NCviewBackground(filePath)
@@ -1497,8 +1316,8 @@ SUB NCviewHEX(filePath AS STRING)
     TEXT 400,600-16," Position " + HEX$(po,8) + " of " + HEX$(si,8) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
 
     PAGE WRITE 1
-    BOX 0,16,800,600-32,0,,RGB(CYAN)
-    DO WHILE cnt<16*35 AND NOT EOF(#3)
+    BOX 0,16,MM.HRES,WITHOUT2.NC,0,,RGB(CYAN)
+    DO WHILE cnt<16*EDIT_ROWS.NC AND NOT EOF(#3)
       li = INPUT$(16, #3)
     
       TEXT 8,firstRow + row, LEFT$(HEX$(po+cnt,8),4), "LT",8,,RGB(BLUE), RGB(CYAN)
@@ -1518,21 +1337,21 @@ SUB NCviewHEX(filePath AS STRING)
     LOOP
     
     PAGE WRITE 0
-    BLIT 0,16,0,16,800,600-32,1
+    BLIT 0,16,0,16,MM.HRES,WITHOUT2.NC,1
     
     DO WHILE change = 0 AND k<>ESC.NC
       DO: k = INKEY$: LOOP WHILE k=""
       IF k=CHR$(136) THEN
         'Page UP
         IF po > 0 THEN 
-          po = MAX(po - 16*35, 0)
+          po = MAX(po - 16*EDIT_ROWS.NC, 0)
           change = 1
         ENDIF
 
       ELSEIF k=CHR$(137) THEN
         'Page DOWN
-        IF (po + 16*35) <= si  THEN 
-          po = po + 16*35
+        IF (po + 16*EDIT_ROWS.NC) <= si  THEN 
+          po = po + 16*EDIT_ROWS.NC
           change = 1
         ENDIF
 
@@ -1548,11 +1367,11 @@ END SUB
 
 SUB NCviewBackground(filePath AS STRING)
   CLS RGB(NOTBLACK)
-  BOX 0,16,800,600-32,0,,RGB(CYAN)
-  LINE 0,7,800,7,2,RGB(WHITE)
-  LINE 0,600-8,800,600-8,2,RGB(WHITE)
-  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
-  TEXT 0,600-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
+  BOX 0,16,MM.HRES,WITHOUT2.NC,0,,RGB(CYAN)
+  LINE 0,7,MM.HRES,7,2,RGB(WHITE)
+  LINE 0,MM.VRES-8,MM.HRES,MM.VRES-8,2,RGB(WHITE)
+  TEXT HALF.NC,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
+  TEXT 0,MM.VRES-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
 END SUB
 
 SUB NCviewTXT(filePath AS STRING)
@@ -1560,9 +1379,9 @@ SUB NCviewTXT(filePath AS STRING)
 
   CLOCK.NC = 2
   NCviewBackground(filePath)
-  CONST lineLength = 99
+  CONST lineLength = (MM.HRES \ 8) - 1
   CONST white = CHR$(8) + CHR$(10) + CHR$(13) + CHR$(32)
-  LOCAL INTEGER firstRow = 16+4, filePos = 0, fileSize = MM.INFO(FILESIZE filePath)
+  LOCAL INTEGER firstRow = 16 + OFFSET.NC, filePos = 0, fileSize = MM.INFO(FILESIZE filePath)
   LOCAL INTEGER maxRow = 0, maxPages, indent = (MM.HRES - 8*lineLength) \ 2
   LOCAL STRING oneLine = "", ch, k = ""
   LOCAL INTEGER pages(1000), cntPage = 1, cntChar = 1, change = 0
@@ -1576,7 +1395,7 @@ SUB NCviewTXT(filePath AS STRING)
       IF ch = LF.NC THEN
         oneLine = ""
         INC maxRow
-        IF maxRow = 35 THEN
+        IF maxRow = EDIT_ROWS.NC THEN
           INC cntPage
           pages(cntPage) = cntChar + 1
           maxRow = 0
@@ -1588,7 +1407,7 @@ SUB NCviewTXT(filePath AS STRING)
         ELSE
           oneLine = ""
           INC maxRow
-          IF maxRow = 35 THEN
+          IF maxRow = EDIT_ROWS.NC THEN
             INC cntPage
             pages(cntPage) = cntChar
             maxRow = 0
@@ -1604,14 +1423,14 @@ SUB NCviewTXT(filePath AS STRING)
   DO
     change = 0
     maxRow = 0
-    BOX 0, 16, 800, 600-32, 0,, RGB(CYAN)
-    TEXT 400, 600-16, " Page " + STR$(cntPage) + "/" + STR$(maxPages) + " ","CT", 8,, RGB(WHITE), RGB(NOTBLACK)
+    BOX 0, 16, MM.HRES, WITHOUT2.NC, 0,, RGB(CYAN)
+    TEXT HALF.NC, MM.VRES-16, " Page " + STR$(cntPage) + "/" + STR$(maxPages) + " ","CT", 8,, RGB(WHITE), RGB(NOTBLACK)
 
     oneLine = ""
     OPEN filePath FOR RANDOM AS #3
       filePos = pages(cntPage)
       SEEK #3, filePos
-      DO WHILE maxRow < 35 AND filePos <= fileSize
+      DO WHILE maxRow < EDIT_ROWS.NC AND filePos <= fileSize
         ch = INPUT$(1, #3)
         INC filePos
         IF ch = LF.NC THEN
@@ -1759,41 +1578,6 @@ SUB NCviewImg(filePath AS STRING)
     TUIwarning("IMAGE VIEWER", "Image can't be decoded")
   ENDIF
 END SUB
-
-FUNCTION NCprepareLogo(f AS STRING) AS INTEGER
-  'read SPR file
-
-  LOCAL INTEGER i, w = 0, h = 0
-  LOCAL STRING s
-
-  ON ERROR SKIP
-  OPEN NC_PATH.NC + f FOR INPUT AS #5
-  IF MM.ERRNO = 0 THEN
-    LINE INPUT #5, s
-    w = VAL(FIELD$(s, 1, ","))
-    'h = VAL(FIELD$(s, 3, ","))
-    NCprepareLogo = 63
-    PAGE WRITE 1
-    CLS RGB(BLACK)
-    DO WHILE NOT EOF(#5)
-      LINE INPUT #5,s
-      FOR i = 1 TO LEN(s)
-        IF MID$(s, i, 1)<>" " THEN
-          PIXEL i-1, h, RGB(NOTBLACK)
-        ENDIF
-      NEXT i
-      INC h
-    LOOP
-    INC h
-    CLOSE #5
-    IF LOGO.NC = 63 THEN BLIT CLOSE #63
-    BLIT READ #63, 0, 0, w, h
-    PAGE WRITE 0
-
-  ELSE
-    NCprepareLogo = 0
-  ENDIF
-END FUNCTION
 
 FUNCTION NCrmdir(filePath AS STRING) AS INTEGER
   'rmdir
@@ -2142,13 +1926,13 @@ SUB NCinit
   NEXT i
 
   INIT.NC = 1
-
+  NCinitMenu 
   NCconfigLoad
-  IF CFG_HighColor.NC THEN
-    MODE 1,16
-  ELSE
-    MODE 1,8
-  ENDIF
+  SELECT CASE INT(MM.INFO(MODE))
+    CASE 2,3,4,5,6,7,8,13,17
+      MODE 1,16
+
+  END SELECT
 
   LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
 
@@ -2172,62 +1956,24 @@ SUB NCinit
   ELSE
     FONT #8,1
   ENDIF
+  EDIT_ROWS.NC = (MM.VRES \ 16) - 2
+  OFFSET.NC = (MM.VRES - 16*(MM.VRES \ 16)) \ 2
+  MAX_ROWS.NC = EDIT_ROWS.NC - 3
+  WITHOUT2.NC = MM.VRES-2*16
+  HALF.NC = MM.HRES \ 2
+  QUART.NC = HALF.NC \ 2
+  MAX_COLS.NC = (HALF.NC \ 8) - 4 
   CLS RGB(NOTBLACK)
-  NCsetMenu(0, "Help", 1)
-  NCsetMenu(1, "GetInf", 1)
-  NCsetMenu(2, "Viewer" , 1)
-  NCsetMenu(3, "Editor" , 0)
-  NCsetMenu(4, "Copy"   , 1)
-  NCsetMenu(5, "Rename", 1)
-  NCsetMenu(6, "NewDir", 1)
-  NCsetMenu(7, "Delete", 1)
-  NCsetMenu(8, "MakMAR", 1)
-  NCsetMenu(9, "QuitNC", 1)
-  NCsetMenu(10,"Config", 1)
-  NCsetMenu(11,"LP=RP", 1)
- 
   NCdrawMenu
 
   SETTICK 1000, NCclock
-END SUB
-
-SUB NCsetMenu(n AS INTEGER, t AS STRING, e AS INTEGER)
-  'set name of F-key menu
-
-  IF n>=0 THEN
-    IF n<12 THEN
-      MENU.NC(n) = LEFT$(t + SPACE$(6), 6)
-      EN_MENU.NC(n) = e
-    END IF
-  END IF
-END SUB
-
-SUB NCdrawMenuPart(fn AS INTEGER)
-  'draws menu at bottom
-  LOCAL INTEGER back, xx = 2
-
-  IF EN_MENU.NC(fn-1) THEN
-    back = RGB(CYAN)
-  ELSE
-    back = RGB(GRAY)
-  ENDIF
-
-  IF MENU.NC(fn-1) <> "" THEN
-    xx = 4 + (fn - 1) * 56
-    IF fn > 1 THEN xx = xx +  (fn-1)*9
-    IF fn > 10 THEN xx = xx + (fn-10) *8 
-    TEXT xx, 584, STR$(fn,0,0),,,, RGB(WHITE), RGB(NOTBLACK)
-    xx = xx + 8
-    IF fn > 9 THEN xx = xx + 8  
-    TEXT xx,584, MENU.NC(fn-1),,,,RGB(NOTBLACK),back
-  END IF
 END SUB
 
 SUB NCdrawMenu
   'draws menu at bottom
   LOCAL INTEGER i, back, xx = 2
 
-  BOX 0,600-16,800,16,0,,RGB(NOTBLACK)
+  BOX 0,MM.VRES-16,MM.HRES,16,0,,RGB(NOTBLACK)
   FOR i = 1 TO 12
     NCdrawMenuPart(i)
   NEXT i    
@@ -2378,12 +2124,14 @@ SUB NCbasHelp(filePath AS STRING)
 
       CASE 1' debug ON
         IF TUIquestion("BASIC HELPERS", "Switch in '" + NCgetName(filePath) + "' debuging ON ?") THEN
-          NCbasDebug(filePath, 1)
+          TUIwarning("DEBUG ON", "Not enabled yet")
+          'NCbasDebug(filePath, 1)
         ENDIF
 
       CASE 2' debug OFF
         IF TUIquestion("BASIC HELPERS", "Switch in '" + NCgetName(filePath) + "' debuging OFF ?") THEN
-          NCbasDebug(filePath, 0)
+          TUIwarning("DEBUG OFF", "Not enabled yet")
+          'NCbasDebug(filePath, 0)
         ENDIF
 
     END SELECT
@@ -2456,21 +2204,15 @@ END SUB
 
 SUB NCviewMAR(filePath AS STRING)
   CONST maxChunkSize = 128
-  LOCAL INTEGER firstRow = 16+4, row = 0, fiLen, curLen = 0, chunkLen
+  LOCAL INTEGER firstRow = 16+OFFSET.NC, row = 0, fiLen, curLen = 0, chunkLen
   LOCAL STRING li, cmd, par, k
   LOCAL INTEGER indent = 0, pg = 1
   LOCAL STRING dialog
   
   EXT_ERR.NC = 0
 
-  CLS RGB(NOTBLACK)
-  BOX 0,16,800,600-32,0,,RGB(CYAN)
-  LINE 0,7,800,7,2,RGB(WHITE)
-  LINE 0,600-8,800,600-8,2,RGB(WHITE)
-  TEXT 400,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
-  BOX 0,16,800,600-32,0,,RGB(CYAN)
-  TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
-  TEXT 0,600-16,"PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
+  CLOCK.NC = 2
+  NCviewBackground(filePath)
 
   OPEN filePath FOR INPUT AS #3
   DO WHILE NOT EOF(#3)
@@ -2511,22 +2253,22 @@ SUB NCviewMAR(filePath AS STRING)
               
     END SELECT
 
-    IF row> 34*16 THEN 
+    IF row>=EDIT_ROWS.NC*16 THEN 
       pg = pg + 1
       row = 0
-      DO: k = INKEY$: LOOP WHILE k<>CHR$(137) AND k<>CHR$(27)
-      IF k=CHR$(27) THEN
+      DO: k = INKEY$: LOOP WHILE k<>CHR$(137) AND k<>ESC.NC
+      IF k=ESC.NC THEN
         EXIT DO
       ELSE
-        BOX 0,16,800,600-32,0,,RGB(CYAN)   
-        TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
+        BOX 0,16,MM.HRES,WITHOUT2.NC,0,,RGB(CYAN)   
+        TEXT HALF.NC,MM.VRES-16," Page " + STR$(pg) + " ","CT",8,,RGB(WTITER,RGN(NOLBLACK)
       ENDIF
     ENDIF
   LOOP
-  TEXT 400,600-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
+  TEXT HALF.NC,MM.VRES-16," Page " + STR$(pg) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
 
   CLOSE #3
-  DO WHILE k<>CHR$(27)
+  DO WHILE k<>ESC.NC
     k = INKEY$
   LOOP
   NCredrawPane(0)
@@ -2536,7 +2278,7 @@ SUB NCviewMAR(filePath AS STRING)
 END SUB
 
 SUB NCfKeys(fkey AS INTEGER)
-  IF NOT EN_MENU.NC(fkey-145) THEN EXIT SUB
+  IF NOT EN_MENU.NC(fkey-145, ALT.NC) THEN EXIT SUB
 
   SELECT CASE fkey
     CASE 145  'F1
@@ -2777,7 +2519,7 @@ SUB NCfKeys(fkey AS INTEGER)
       IF ALT.NC THEN
         IF TUIquestion("QUIT", "Are you ready to leave me alone?") THEN
           NCchdir ACT_PATH.NC
-          NCconfigSave(NCconfigPack())
+          NCconfigSave'(NCconfigPack())
           OPTION BREAK 3
           CLS
           END
@@ -3329,7 +3071,7 @@ SUB NCcurDown
     IF CURSOR.NC(ACTIVE.NC) + POS.NC(ACTIVE.NC) < COUNT.NC(ACTIVE.NC) THEN
       NCcursor(ACTIVE.NC,0)
       POS.NC(ACTIVE.NC) = POS.NC(ACTIVE.NC) + 1
-      BLIT 400*ACTIVE.NC+8,32,400*ACTIVE.NC+8,16,384,16*MAX_ROWS.NC
+      BLIT HALF.NC*ACTIVE.NC+8,32,HALF.NC*ACTIVE.NC+8,16,HALF.NC-16,16*MAX_ROWS.NC
       NCcursor(ACTIVE.NC,1)
     ENDIF
   ENDIF
@@ -3346,7 +3088,7 @@ SUB NCcurUp
     IF POS.NC(ACTIVE.NC) > 0 THEN
       NCcursor(ACTIVE.NC,0)
       POS.NC(ACTIVE.NC) = POS.NC(ACTIVE.NC) - 1
-      BLIT 400*ACTIVE.NC+8,16,400*ACTIVE.NC+8,32,384,16*MAX_ROWS.NC
+      BLIT HALF.NC*ACTIVE.NC+8,16,HALF.NC*ACTIVE.NC+8,32,HALF.NC-16,16*MAX_ROWS.NC
       NCcursor(ACTIVE.NC,1)
     ENDIF
   ENDIF
@@ -3699,13 +3441,13 @@ SUB NCeditHEX(filePath AS STRING)
   'simple hex editor
 
   CLOCK.NC = 2
-  LOCAL INTEGER firstRow = 16+4, row = 0, cnt = 0, change = 0, b, po = 0, i, ln, cx, cy, edNum
+  LOCAL INTEGER firstRow = 16+OFFSET.NC, row = 0, cnt = 0, change = 0, b, po = 0, i, ln, cx, cy, edNum
   LOCAL INTEGER cursX = 0, cursY = 0, cursLN(EDIT_ROWS.NC), maxRow, curPos, digit = 0, digPos = 0
   LOCAL INTEGER fCol = RGB(NOTBLACK), bCol = RGB(CYAN), wCol = RGB(WHITE), nCol = RGB(BLUE), rCol = RGB(RED)
   LOCAL STRING li,k
 
   NCviewBackground(filePath)
-  TEXT 0,600-16,"PG/CRSR/0-F/ALT+char/ENTER/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
+  TEXT 0,MM.VRES-16,"PG/CRSR/0-F/ALT+char/ENTER/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
   OPEN filePath FOR RANDOM AS #3
   LOCAL INTEGER si = LOF(#3)
   DO 
@@ -3715,10 +3457,10 @@ SUB NCeditHEX(filePath AS STRING)
     row = 0
   
     curPos = po + cursX + 16*cursY
-    TEXT 400, 600-16, " Position " + HEX$(curPos, 8) + " of " + HEX$(si-1,8) + " ", "CT", 8,, wCol, fCol
+    TEXT HALF.NC, MM.VRES-16, " Position " + HEX$(curPos, 8) + " of " + HEX$(si-1,8) + " ", "CT", 8,, wCol, fCol
 
     PAGE WRITE 1
-    BOX 0, 16, 800, 600-32,0 ,, bCol
+    BOX 0, 16, MM.HRES, WITHOUT2.NC,0 ,, bCol
     DO WHILE cnt < 16*EDIT_ROWS.NC AND NOT EOF(#3)
       li = INPUT$(16, #3)
     
@@ -3759,7 +3501,7 @@ SUB NCeditHEX(filePath AS STRING)
     LOOP
     
     PAGE WRITE 0
-    BLIT 0,16,0,16,800,600-32,1
+    BLIT 0,16,0,16,MM.HRES,WITHOUT2.NC,1
     
     IF cursY > maxRow THEN
       cursY = maxRow
@@ -4343,6 +4085,569 @@ SUB NCfileFromServer(src AS STRING, dst AS STRING)
 
     NCoutDebug("Something strange received: " + partData)
   ENDIF
+END SUB
+
+SUB NCsort(side AS INTEGER)
+  'sort dir (need speed up, SORT()???)
+
+  IF UNSORT.NC THEN EXIT SUB
+  LOCAL INTEGER i
+  
+  IF MM.INFO(VERSION)<5.06 THEN
+    LOCAL INTEGER mi, j
+    LOCAL STRING ms
+
+    'use old functions
+    FOR i = 1 TO COUNT.NC(side)
+      mi = i - 1
+      ms = ITEM.NC(side,mi)
+      FOR j = i TO COUNT.NC(side)
+        IF CFG_DirFil.NC THEN
+          IF UCASE$(ITEM.NC(side,j)) < UCASE$(ms) THEN
+            mi = j
+            ms = ITEM.NC(side,mi)
+          ENDIF
+        ELSE
+          IF UCASE$(MID$(ITEM.NC(side,j),2)) < UCASE$(MID$(ms,2)) THEN
+            mi = j
+            ms = ITEM.NC(side,mi)
+          ENDIF
+        ENDIF
+      NEXT j
+      ITEM.NC(side,mi) = ITEM.NC(side,i-1)
+      ITEM.NC(side,i-1) = ms 
+    NEXT i
+  ELSE
+
+    'use new SORT functions
+    LOCAL STRING tmp(COUNT.NC(side))
+
+    FOR i = 1 TO COUNT.NC(side)
+      IF CFG_DirFil.NC THEN    
+        tmp(i) = ITEM.NC(side, i)
+      ELSE
+        tmp(i) = MID$(ITEM.NC(side, i), 2) + LEFT$(ITEM.NC(side, i), 1)
+      ENDIF
+    NEXT i
+    SORT tmp(),, 2, 1, COUNT.NC(side) 
+    FOR i = 1 TO COUNT.NC(side)
+      IF CFG_DirFil.NC THEN    
+        ITEM.NC(side, i) = tmp(i)
+      ELSE
+        ITEM.NC(side, i) = RIGHT$(tmp(i), 1) + LEFT$(tmp(i), LEN(tmp(i))-1)
+      ENDIF
+    NEXT i    
+  ENDIF
+END SUB
+
+FUNCTION NCprepareLogo(f AS STRING) AS INTEGER
+  'read SPR file
+
+  LOCAL INTEGER i, w = 0, h = 0
+  LOCAL STRING s
+
+  ON ERROR SKIP
+  OPEN NC_PATH.NC + f FOR INPUT AS #5
+  IF MM.ERRNO = 0 THEN
+    LINE INPUT #5, s
+    w = VAL(FIELD$(s, 1, ","))
+    'h = VAL(FIELD$(s, 3, ","))
+    NCprepareLogo = 63
+    PAGE WRITE 1
+    CLS RGB(BLACK)
+    DO WHILE NOT EOF(#5)
+      LINE INPUT #5,s
+      FOR i = 1 TO LEN(s)
+        IF MID$(s, i, 1)<>" " THEN
+          PIXEL i-1, h, RGB(NOTBLACK)
+        ENDIF
+      NEXT i
+      INC h
+    LOOP
+    INC h
+    CLOSE #5
+    IF LOGO.NC = 63 THEN BLIT CLOSE #63
+    BLIT READ #63, 0, 0, w, h
+    PAGE WRITE 0
+
+  ELSE
+    NCprepareLogo = 0
+  ENDIF
+END FUNCTION
+
+SUB NCconfig
+  'configure NC
+
+  LOCAL STRING txt = "External viewers enabled"
+        txt = txt + ",External actions enabled"
+        txt = txt + ",ESC to parent dir"
+        txt = txt + ",DIRs before FILEs"
+        txt = txt + ",TEXT VIEWER fallback (HEX else)"
+        txt = txt + ",HIGH COLOR mode"
+        txt = txt + ",FAST SERIAL SERVER (691200 baud)"
+        txt = txt + ",ESP8266 installed"
+     
+  LOCAL INTEGER sel = NCconfigPack()
+  LOCAL INTEGER oldSel = sel
+  sel = TUIselect("CONFIGURATION",txt,sel)
+  NCconfigUnpack(sel)
+  
+  oldSel = sel XOR oldSel 'difference between OLD and NEW settings  
+  IF oldSel AND 32 THEN
+    IF CFG_HighColor.NC THEN
+      'MODE 1,16
+    ELSE
+      'MODE 1,8
+    ENDIF
+    FONT 8
+    LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
+  ENDIF
+
+  IF oldSel AND 64 THEN 
+    IF CFG_FastSerial.NC THEN
+      SERIAL_INIT.NC = "COM3:691200,8050"
+    ELSE
+      SERIAL_INIT.NC = "COM3:230400,8050"
+    ENDIF
+    IF SERIAL_ON.NC THEN CLOSE #1
+    SERIAL_ON.NC = 0
+    NULL_I.NC = NCserialOK()
+  ENDIF
+  
+  IF oldSel AND 128 THEN
+    IF CFG_ESP.NC THEN
+      IF SERIAL_ON.NC THEN
+        ON ERROR SKIP
+        CLOSE #1
+        SERIAL_ON.NC = 0
+      ENDIF
+      NCespTest
+      IF ESP.NC THEN
+        NCespWifiTest
+      ENDIF
+    ELSE
+      IF ESP_ON.NC THEN
+        ON ERROR SKIP
+        CLOSE #1
+        SERIAL_ON.NC = 0
+      ENDIF
+      WIFI.NC = 0
+      ESP.NC = 0
+      ESP_VERSION.NC = ""
+    ENDIF
+  ENDIF
+  IF (oldSel AND 8) OR (oldSel AND 32) THEN 'changed MODE or items sorting
+    NCchangeDir(0,PATH.NC(0))
+    NCchangeDir(1,PATH.NC(1))
+    NCdrawMenu
+    NCdrawCL(ACT_PATH.NC)
+    NCcursor(ACTIVE.NC,1)
+  ENDIF
+  IF oldSel <> 0 THEN 
+    CONFIG.NC = sel
+    NCconfigSave'(sel)
+  ENDIF
+END SUB
+
+FUNCTION NCconfigPack() AS INTEGER
+  'pack config into integer
+
+  NCconfigPack = CFG_ExtView.NC + 2*CFG_ExtAct.NC + 4*CFG_ESCup.NC
+  NCconfigPack = NCconfigPack + 8*CFG_DirFil.NC + 16*CFG_TXTfb.NC + 32*CFG_HighColor.NC
+  NCconfigPack = NCconfigPack + 64*CFG_FastSerial.NC + 128*CFG_ESP.NC
+END FUNCTION
+
+SUB NCconfigSaveOLD(sel AS INTEGER)
+  'save config
+  OPEN NC_PATH.NC + "NC.CFG" FOR OUTPUT AS #3
+  ?#3,BIN$(sel)
+  IF ESP_SSID.NC <> "" THEN
+    ?#3, ESP_SSID.NC
+  ENDIF
+  IF ESP_PASS.NC <> "" THEN
+    ?#3, ESP_PASS.NC
+  ENDIF
+  CLOSE #3
+END SUB
+
+SUB NCconfigUnpack(sel AS INTEGER)
+  'unpack config from integer
+
+  CFG_ExtView.NC = (sel AND 1) > 0 
+  CFG_ExtAct.NC = (sel AND 2) > 0
+  CFG_ESCup.NC = (sel AND 4) > 0
+  CFG_DirFil.NC = (sel AND 8) > 0
+  CFG_TXTfb.NC = (sel AND 16) > 0
+  CFG_HighColor.NC = (sel AND 32) > 0
+  CFG_FastSerial.NC = (sel AND 64) > 0 
+  CFG_ESP.NC = (sel AND 128) > 0 
+END SUB
+
+SUB NCconfigSave
+  'save config
+
+  OPEN NC_PATH.NC + "NC.CFG" FOR OUTPUT AS #3
+  ?#3, "'Napoleon Commander configuration saved on " + DATE$ + " at " + TIME$
+  ?#3
+
+  ?#3, "#colors"
+  ?#3, "'use 256 or 65536 colors"
+  IF CFG_HighColor.NC THEN
+    ?#3, "65536"
+  ELSE
+    ?#3, "256"
+  ENDIF
+  ?#3
+
+  ?#3, "#server"
+  ?#3, "'use ESP8266 (when fitted) or serial port"
+  IF CFG_ESP.NC THEN
+    ?#3, "ESP"
+  ELSE
+    ?#3, "serial"
+  ENDIF
+  ?#3
+
+  ?#3, "#serial speed"
+  ?#3, "'server serial port speed in baud"
+  IF CFG_FastSerial.NC THEN
+    ?#3, "691200"
+  ELSE
+    ?#3, "230400"
+  ENDIF
+  ?#3
+
+  ?#3, "#viewer fallback"
+  ?#3, "'when specific viewer not exists"
+  IF CFG_TXTfb.NC THEN
+    ?#3, "text"
+  ELSE
+    ?#3, "HEX"
+  ENDIF
+  ?#3
+
+  ?#3, "#listing"
+  ?#3, "'DIRs are listed before FILEs or mixed together"
+  IF CFG_DirFil.NC THEN
+    ?#3, "DIRs first"
+  ELSE
+    ?#3, "mixed"
+  ENDIF
+  ?#3
+
+  ?#3, "#ESC up"
+  ?#3, "'press ESCape to go to parent dir"
+  IF CFG_ESCup.NC THEN
+    ?#3, "yes"
+  ELSE
+    ?#3, "no"
+  ENDIF
+  ?#3
+
+  ?#3, "#external viewer"
+  ?#3, "'look into VIEWER.INC for viewers"
+  IF CFG_ExtView.NC THEN
+    ?#3, "enabled"
+  ELSE
+    ?#3, "disabled"
+  ENDIF
+  ?#3
+
+  ?#3, "#external action"
+  ?#3, "'look into ACTION.INC for actions"
+  IF CFG_ExtAct.NC THEN
+    ?#3, "enabled"
+  ELSE
+    ?#3, "disabled"
+  ENDIF
+  ?#3
+
+  IF ESP_SSID.NC<>"" THEN
+    ?#3, "#WiFi SSID"
+    ?#3, ESP_SSID.NC
+    ?#3
+  ENDIF
+  IF ESP_PASS.NC<>"" THEN
+    ?#3, "#WiFi password"
+    ?#3, ESP_PASS.NC
+    ?#3
+  ENDIF
+
+  CLOSE #3
+END SUB
+
+SUB NCconfigLoad
+  'load config
+
+  LOCAL STRING sCfg
+  ON ERROR SKIP
+  OPEN NC_PATH.NC + "NC.CFG" FOR INPUT AS #3
+  IF MM.ERRNO = 0 THEN
+    LINE INPUT #3, sCfg
+    IF LEFT$(sCfg, 19)="'Napoleon Commander" THEN
+      'new config file
+
+      LOCAL STRING command=""
+      DO WHILE NOT EOF(#3)
+        LINE INPUT #3, sCfg
+        IF sCfg<>"" THEN 'skip empty lines
+          IF LEFT$(sCfg, 1)<>"'" THEN 'skip comments
+            IF LEFT$(sCfg, 1)="#" THEN
+              'this is command
+              command = LCASE$(MID$(sCfg, 2))
+
+            ELSE
+              SELECT CASE command
+                CASE "server"
+                  CFG_ESP.NC = (sCfg="ESP")
+                  
+                CASE "colors"
+                  CFG_HighColor.NC = (sCfg="65536")
+
+                CASE "serial speed"
+                  CFG_FastSerial.NC = (sCfg="691200")
+                  
+                CASE "viewer fallback"
+                  CFG_TXTfb.NC = (sCfg="text")
+
+                CASE "listing"
+                  CFG_DirFil.NC = (sCfg="DIRs first")
+
+                CASE "esc up"
+                  CFG_ESCup.NC = (sCfg="yes")
+
+                CASE "external viewer"
+                  CFG_ExtView.NC = (sCfg="enabled")
+
+                CASE "external action"
+                  CFG_ExtAct.NC = (sCfg="enabled")
+
+                CASE "wifi ssid"
+                  ESP_SSID.NC = sCfg
+
+                CASE "wifi password"
+                  ESP_PASS.NC = sCfg
+
+                CASE ELSE
+                  ERROR "UNKNOWN CONFIG COMMAND: >" + command + "<"
+
+              END SELECT
+            ENDIF
+          ENDIF
+        ENDIF
+      LOOP
+        
+    ELSE
+      'old config file, will be replaced
+      CONFIG.NC = VAL("&b" + sCfg)
+      NCconfigUnpack(CONFIG.NC)
+      IF NOT EOF(#3) THEN
+        LINE INPUT #3, ESP_SSID.NC
+      ENDIF
+      IF NOT EOF(#3) THEN
+        LINE INPUT #3, ESP_PASS.NC
+      ENDIF
+
+    ENDIF
+
+    CLS RGB(NOTBLACK)
+    CLOSE #3
+  ENDIF
+  IF CFG_FastSerial.NC THEN
+    SERIAL_INIT.NC = "COM3:691200,8050"
+  ELSE
+    SERIAL_INIT.NC = "COM3:230400,8050"
+  ENDIF
+  IF CFG_ESP.NC THEN
+    FONT.TUI = 1
+    NCespTest
+    IF ESP.NC THEN
+      NCespWifiTest
+    ELSE
+      CFG_ESP.NC = 0
+    ENDIF
+    FONT.TUI = 8
+  ELSE
+    ESP.NC = 0
+    ESP_ON.NC = 0
+    ESP_VERSION.NC = ""
+  ENDIF
+END SUB
+
+SUB NCdrawMenuPartOLD(fn AS INTEGER)
+  'draws menu at bottom
+  LOCAL INTEGER back, xx = 2
+
+  IF EN_MENU.NC(fn-1) THEN
+    back = RGB(CYAN)
+  ELSE
+    back = RGB(GRAY)
+  ENDIF
+
+  IF MENU.NC(fn-1) <> "" THEN
+    xx = 4 + (fn - 1) * 56
+    IF fn > 1 THEN xx = xx +  (fn-1)*9
+    IF fn > 10 THEN xx = xx + (fn-10) *8 
+    TEXT xx, MM.VRES-16, STR$(fn,0,0),,,, RGB(WHITE), RGB(NOTBLACK)
+    xx = xx + 8
+    IF fn > 9 THEN xx = xx + 8  
+    TEXT xx,MM.VRES-16, MENU.NC(fn-1),,,,RGB(NOTBLACK),back
+  END IF
+END SUB
+
+SUB NCdrawMenuPart(fn AS INTEGER)
+  'draws menu at bottom
+
+  LOCAL INTEGER back, position = MM.HRES \ 12, offset = (MM.HRES - 12*position) \ 2, xx
+
+  IF EN_MENU.NC(fn-1, ALT.NC) THEN
+    back = RGB(CYAN)
+  ELSE
+    back = RGB(GRAY)
+  ENDIF
+
+  IF MENU.NC(fn-1, ALT.NC) <> "" THEN
+    xx = offset + (fn - 1) * position
+    TEXT xx, MM.VRES-16, STR$(fn,0,0),,,, RGB(WHITE), RGB(NOTBLACK)
+    xx = xx + 8
+    IF fn > 9 THEN xx = xx + 8  
+    IF ALT.NC THEN
+      TEXT xx,MM.VRES-16, MENU.NC(fn-1, 1),,,,RGB(NOTBLACK),back
+    ELSE
+      TEXT xx,MM.VRES-16, MENU.NC(fn-1, 0),,,,RGB(NOTBLACK),back
+    ENDIF
+  END IF
+END SUB
+
+SUB NCinitMenu
+  IF MM.HRES>=1920 THEN
+    '18 chars per menu
+    NCsetMenu(1, "Show Help Text", 0, 01)
+    NCsetMenu(2, "Get File Info", 0, 1)
+    NCsetMenu(3, "File Viewer" , 0, 1)
+    NCsetMenu(4, "HEX editor" , 0, 1)
+    NCsetMenu(5, "Copy File"   , 0, 1)
+    NCsetMenu(6, "Rename File", 0, 1)
+    NCsetMenu(7, "New Directory", 0, 1)
+    NCsetMenu(8, "Delete File", 0, 1)
+    NCsetMenu(9, "Make MAR Archive", 0, 1)
+    NCsetMenu(10, "Quit NC", 0, 1)
+    NCsetMenu(11,"Configure NC", 0, 1)
+    NCsetMenu(12,"LeftPane=RightPane", 0, 1)
+    NCsetMenu(1, "Source Left Pane", 1, 1)
+    NCsetMenu(2, "Source Right Pane", 1, 1)
+    NCsetMenu(3, "HEX viewer", 1, 1)
+    NCsetMenu(4, "BASIC Help", 1, 1)
+    NCsetMenu(5, "Move File", 1, 1)
+    NCsetMenu(6, "Rename File", 1, 1)
+    NCsetMenu(7, "New Directory", 1, 1)
+    NCsetMenu(8, "Delete File", 1, 1)
+    NCsetMenu(9, "Compress to File", 1, 1)
+    NCsetMenu(10, "Quit NC", 1, 1)
+    DBG NCsetMenu(11, "DEBUG", 1, 1)
+    NCsetMenu(12,"Set WiFi Network", ESP.NC)
+
+  ELSEIF MM.HRES>=1280 THEN
+    '11 chars per menu
+    NCsetMenu(1, "Help Text", 0, 01)
+    NCsetMenu(2, "Get Info", 0, 1)
+    NCsetMenu(3, "Viewer" , 0, 1)
+    NCsetMenu(4, "HEX editor" , 0, 1)
+    NCsetMenu(5, "Copy File"   , 0, 1)
+    NCsetMenu(6, "Rename File", 0, 1)
+    NCsetMenu(7, "New Dir", 0, 1)
+    NCsetMenu(8, "Delete File", 0, 1)
+    NCsetMenu(9, "Make MAR", 0, 1)
+    NCsetMenu(10, "Quit NC", 0, 1)
+    NCsetMenu(11,"Config NC", 0, 1)
+    NCsetMenu(12,"Left=Right", 0, 1)
+    NCsetMenu(1, "Source LP", 1, 1)
+    NCsetMenu(2, "Source RP", 1, 1)
+    NCsetMenu(3, "HEX viewer", 1, 1)
+    NCsetMenu(4, "BASIC Help", 1, 1)
+    NCsetMenu(5, "Move File", 1, 1)
+    NCsetMenu(6, "Rename File", 1, 1)
+    NCsetMenu(7, "New Dir", 1, 1)
+    NCsetMenu(8, "Delete File", 1, 1)
+    NCsetMenu(9, "Compression", 1, 1)
+    NCsetMenu(10, "Quit NC", 1, 1)
+    DBG NCsetMenu(11, "DEBUG", 1, 1)
+    NCsetMenu(12,"Set WiFi", ESP.NC)
+
+  ELSEIF Mm.HRES>=960 THEN
+    '8 chars per menu
+    NCsetMenu(1, "Help Txt", 0, 01)
+    NCsetMenu(2, "Get Info", 0, 1)
+    NCsetMenu(3, "Viewer" , 0, 1)
+    NCsetMenu(4, "HEX edit" , 0, 1)
+    NCsetMenu(5, "CopyFile"   , 0, 1)
+    NCsetMenu(6, "Rename", 0, 1)
+    NCsetMenu(7, "New Dir", 0, 1)
+    NCsetMenu(8, "Delete", 0, 1)
+    NCsetMenu(9, "Make MAR", 0, 1)
+    NCsetMenu(10, "Quit NC", 0, 1)
+    NCsetMenu(11,"Config", 0, 1)
+    NCsetMenu(12,"LPa=RPa", 0, 1)
+    NCsetMenu(1, "SourceLP", 1, 1)
+    NCsetMenu(2, "SourceRP", 1, 1)
+    NCsetMenu(3, "Viev HEX", 1, 1)
+    NCsetMenu(4, "Hlp BAS", 1, 1)
+    NCsetMenu(5, "MoveFile", 1, 1)
+    NCsetMenu(6, "Rename", 1, 1)
+    NCsetMenu(7, "New Dir", 1, 1)
+    NCsetMenu(8, "Delete", 1, 1)
+    NCsetMenu(9, "Compres", 1, 1)
+    NCsetMenu(10, "Quit NC", 1, 1)
+    DBG NCsetMenu(11, "DEBUG", 1, 1)
+    NCsetMenu(12,"Set WiFi", ESP.NC)
+
+  ELSE
+    '6 chars per menu
+    NCsetMenu(1, "Help", 0, 01)
+    NCsetMenu(2, "GetInf", 0, 1)
+    NCsetMenu(3, "Viewer" , 0, 1)
+    NCsetMenu(4, "EdiHEX" , 0, 1)
+    NCsetMenu(5, "Copy"   , 0, 1)
+    NCsetMenu(6, "Rename", 0, 1)
+    NCsetMenu(7, "NewDir", 0, 1)
+    NCsetMenu(8, "Delete", 0, 1)
+    NCsetMenu(9, "MakMAR", 0, 1)
+    NCsetMenu(10, "QuitNC", 0, 1)
+    NCsetMenu(11,"Config", 0, 1)
+    NCsetMenu(12,"LP=RP", 0, 1)
+    NCsetMenu(1, "SourLP", 1, 1)
+    NCsetMenu(2, "SourRP", 1, 1)
+    NCsetMenu(3, "VieHEX", 1, 1)
+    NCsetMenu(4, "HlpBAS", 1, 1)
+    NCsetMenu(5, "Move", 1, 1)
+    NCsetMenu(6, "Rename", 1, 1)
+    NCsetMenu(7, "NewDir", 1, 1)
+    NCsetMenu(8, "Delete", 1, 1)
+    NCsetMenu(9, "Comprs", 1, 1)
+    NCsetMenu(10, "QuitNC", 1, 1)
+    DBG NCsetMenu(11, "DEBUG", 1, 1)
+    NCsetMenu(12,"WiFi", ESP.NC)
+  ENDIF
+END SUB
+
+
+SUB NCsetMenu(n AS INTEGER, t AS STRING, alt AS INTEGER, e AS INTEGER)
+  'set name of F-key menu
+
+  LOCAL INTEGER ll = 6
+  IF MM.HRES>=1920 THEN
+    ll = 18
+  ELSEIF MM.HRES>=1280 THEN
+    ll=11
+  ELSEIF MM.HRES>=960 THEN
+    ll=8
+  ENDIF
+  IF n>0 THEN
+    IF n<13 THEN
+      MENU.NC(n-1, alt) = LEFT$(t + SPACE$(ll), ll)
+      EN_MENU.NC(n-1, alt) = e
+    END IF
+  END IF
 END SUB
 
 
