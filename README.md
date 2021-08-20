@@ -36,11 +36,12 @@ NCserver.py -s <serverdir> -p <portname> -b <baudrate>
 ```
 
 ### VERSION HISTORY
-#### v1.33
-	resolution independt, but it needs at least 800px horizonatlly
-	new config system (old will be converted on-the-fly)
+#### v1.38
+	better resolution configuration
+	improved config system (old will be converted on-the-fly)
 	speed-up
 	bugfixes
+	test for TUI.INC version (needed for new config)
 	
 #### v1.26
 	combined serial and network communication (switch ON/OFF ESP8266 with F11, restart server and use other medium)
