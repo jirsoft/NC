@@ -1,5 +1,5 @@
 'Simple TUI, it's prepared for screenshoting
-CONST VERSION.TUI = "0.42"
+CONST VERSION.TUI = "0.45"
 
 'SUB TUIinfo(title AS STRING, txt() AS STRING, logo AS INTEGER)
   'Shows more lines of info text (BLIT #1), also LOGO (blitnum)
@@ -14,7 +14,7 @@ CONST VERSION.TUI = "0.42"
   'Finish progress (BLIT #2)
 
 'FUNCTION TUIchoice(title AS STRING, txt AS STRING) AS INTEGER
-  'Select one from up to 10 choices with keys 0-9 (BLIT #3)
+  'Select one from up to 10 choices with keys 0-9, cancel=ESC, OK=ENTER (BLIT #3)
 
 'SUB TUIwarning(title AS STRING, txt AS STRING)
   'Simple warning, wait for any key (BLIT #4)
@@ -23,7 +23,9 @@ CONST VERSION.TUI = "0.42"
   'Question, returns 1 when OK (ENTER) was pressed, 0 else (BLIT #5)
 
 'FUNCTION TUIinput(title AS STRING, txt AS STRING, def AS STRING, en AS STRING) AS STRING
-  'Input string, returns text, DEL erase all, BACKSPACE 1 char, ENTER to finish (BLIT #6)
+  'Input string, returns text
+  'HOME to begin, END to end, CRSR left + right
+  'SHIFT+DEL erase all, BACKSPACE 1 char left, DEL 1 char right, ENTER to finish (BLIT #6) 
 
 'FUNCTION TUIselect(title AS STRING, txt AS STRING, s AS INTEGER) AS INTEGER
   'Selection checkbox, can select up to 10 choices with keys 0-9 (BLIT #7)
@@ -54,7 +56,6 @@ CONST VERSION.TUI = "0.42"
   'waits for key or until no key pressed
 
 DIM INTEGER ON.TUI, X.TUI, Y.TUI, W.TUI, H.TUI 'for screenshot
-
 CONST CURSOR_SPEED.TUI = 300 'cursor blinking speed in ms
 CONST ESC.TUI = CHR$(27), ENTER.TUI = CHR$(10)
 DIM STRING TICK.TUI = CHR$(232) 'tick character
@@ -145,12 +146,12 @@ SUB TUIwaitingOFF(coord AS STRING)
 END SUB
 
 FUNCTION TUIchoice(title AS STRING, txt AS STRING) AS INTEGER
-  'Select one from up to 10 choices with keys 0-9 (BLIT #3)
+  'Select one from up to 10 choices with keys 0-9, ENTER or ESC to finish (BLIT #3)
   
   FONT FONT.TUI
   LOCAL INTEGER fow = MM.INFO(FONTWIDTH)
   LOCAL INTEGER foh = MM.INFO(FONTHEIGHT)
-  LOCAL INTEGER w = 4*fow + fow*MAX(LEN(title),13) 'minimum 13 chars
+  LOCAL INTEGER w = 4*fow + fow*MAX(LEN(title),25) 'minimum 13 chars
   LOCAL INTEGER i,cnt = 0, h = 5*foh
   LOCAL STRING k, keysEnabled = "0123456789"
   
@@ -159,7 +160,7 @@ FUNCTION TUIchoice(title AS STRING, txt AS STRING) AS INTEGER
   LOOP
   cnt = MIN(cnt, 10)
 
-  keysEnabled = LEFT$(keysEnabled, cnt) + ESC.TUI
+  keysEnabled = LEFT$(keysEnabled, cnt) + ESC.TUI + ENTER.TUI
 
   h = foh*cnt + 4*foh
   FOR i = 1 TO cnt
@@ -176,14 +177,21 @@ FUNCTION TUIchoice(title AS STRING, txt AS STRING) AS INTEGER
   FOR i = 1 TO cnt
     TEXT dx+fow,dy+foh/2+i*foh," " + STR$(i-1) + " " + FIELD$(txt, i, ","),"LT",,,FC.TUI,BC.TUI
   NEXT i
-  TEXT dx+w\2,dy+h-3/2*foh," Press 0-" + STR$(cnt-1) + " ","CT",,,BC.TUI,FC.TUI
+  TEXT dx+w\2,dy+h-3/2*foh," Press 0-" + STR$(cnt-1) + ", ENTER or ESC ","CT",,,BC.TUI,FC.TUI
   ON.TUI = 1: X.TUI = dx: Y.TUI = dy: W.TUI = w: H.TUI = h 'for screenshot
 
   DO
     k = INKEY$
   LOOP WHILE INSTR(keysEnabled,k)=0 
   DO:LOOP WHILE INKEY$<>"" 
-  TUIchoice = ASC(k)-48
+  IF k=ESC.NC THEN
+    TUIchoice = -ASC(ESC.NC)
+  ELSEIF k=ENTER.NC THEN
+    TUIchoice = -ASC(ENTER.NC)
+  ELSE
+    TUIchoice = ASC(k)-48
+  ENDIF
+
   ON.TUI = 0  
   BLIT WRITE #3,dx,dy
   BLIT CLOSE #3
@@ -289,7 +297,7 @@ FUNCTION TUIselect(title AS STRING, txt AS STRING, s AS INTEGER) AS INTEGER
     TEXT dx+fow,dy+foh/2 + i*foh," " + STR$(i-1) + " " + mark + " " + FIELD$(txt, i, ","),"LT",,,FC.TUI,BC.TUI
   NEXT i
   TEXT dx+w\2,dy+h-3*foh," Set/Unset with 0-" + STR$(cnt-1) + " ","CT",,,FC.TUI,BC.TUI
-  TEXT dx+w\2,dy+h-3/2*foh,"  OK  ","CT",,,BC.TUI,FC.TUI
+  TEXT dx+w\2,dy+h-3/2*foh," ENTER OK, ESC cancel ","CT",,,BC.TUI,FC.TUI
   ON.TUI = 1: X.TUI = dx: Y.TUI = dy: W.TUI = w: H.TUI = h 'for screenshot
 
   DO
@@ -318,8 +326,8 @@ FUNCTION TUIselect(title AS STRING, txt AS STRING, s AS INTEGER) AS INTEGER
 END FUNCTION
 
 SUB TUIwaitForKey
-  DO:LOOP WHILE INKEY$=""
   TUIwaitForNoKey
+  DO:LOOP WHILE INKEY$=""
 END SUB
 
 SUB TUIwaitForNoKey
@@ -464,7 +472,7 @@ FUNCTION TUIgetSelect(path AS STRING, ext AS STRING) AS STRING
   'once-shot file selector
 
   LOCAL STRING f
-  LOCAL INTEGER i
+  LOCAL INTEGER i, lnt = -1
   LOCAL INTEGER cnt, cntExt = -1
 
   FOR i = 1 TO LEN(ext)
@@ -508,10 +516,10 @@ FUNCTION TUIgetSelect(path AS STRING, ext AS STRING) AS STRING
   LOCAL STRING fn(cnt)
 
   cnt = 1 
-  fn(cnt) = "<ROOT>"
+  fn(cnt) = "A<ROOT>"
   IF path <> "A:/" THEN
     INC cnt
-    fn(cnt) = "<UP>"
+    fn(cnt) = "B<UP>"
   ENDIF
 
   f = DIR$("", ALL)
@@ -519,28 +527,34 @@ FUNCTION TUIgetSelect(path AS STRING, ext AS STRING) AS STRING
     IF LEFT$(f, 1) <> "." THEN
       IF MM.INFO(FILESIZE f) < 0 THEN
         INC cnt
-        fn(cnt) = f + " <DIR>"
+        fn(cnt) = "D" + f + " <DIR>"
       ELSEIF ext = "" THEN
         INC cnt
-        fn(cnt) = f
+        fn(cnt) = "F" + f
       ELSE
         FOR i = 0 TO cntExt
           IF UCASE$(RIGHT$(f, LEN(ex(i)))) = ex(i) THEN
             INC cnt
-            fn(cnt) = f
+            fn(cnt) = "F" + f
             EXIT FOR
           ENDIF
         NEXT i
       ENDIF
+      'lnt = MAX(lnt, LEN(fn(cnt)) - 1)
     ENDIF
     f = DIR$()
   LOOP
   SORT fn(),,2
+  FOR i = 1 TO cnt
+    fn(i) = MID$(fn(i), 2)
+  NEXT i 
   TUIgetSelect = TUIgetItem("SELECT " + ext + " FILE", path, fn())
 END FUNCTION
 
 FUNCTION TUIinput(title AS STRING, txt AS STRING, def AS STRING, en AS STRING) AS STRING
-  'Input string, returns text, DEL erase all, BACKSPACE 1 char, ENTER to finish (BLIT #6)
+  'Input string, returns text
+  'HOME to begin, END to end, CRSR left + right
+  'SHIFT+DEL erase all, BACKSPACE 1 char left, DEL 1 char right, ENTER to finish (BLIT #6) 
  
   FONT FONT.TUI
   LOCAL INTEGER fow = MM.INFO(FONTWIDTH)
@@ -618,6 +632,18 @@ FUNCTION TUIinput(title AS STRING, txt AS STRING, def AS STRING, en AS STRING) A
             INC cursorX, -fow
           ENDIF
         ENDIF
+
+      CASE CHR$(134)    'HOME
+        LINE cursorX, cursorY, cursorX + fow, cursorY, 2, BC.TUI
+        cursorX = dx + fow
+
+      CASE CHR$(135)    'END
+        LINE cursorX, cursorY, cursorX + fow, cursorY, 2, BC.TUI
+        cursorX = dx + fow*(LEN(TUIinput) + 1)
+        IF cursorX > dx+w-2*fow THEN
+          INC cursorX, -fow
+        ENDIF
+
 
       CASE ELSE
         IF INSTR(en,k)>0 THEN

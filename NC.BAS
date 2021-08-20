@@ -1,5 +1,5 @@
 'Napoleon Commander
-CONST VERSION.NC = "1.33"
+CONST VERSION.NC = "1.38"
 
 #DEFINE "DBG ", "'"
 '#DEFINE "DBG ", ""
@@ -11,6 +11,7 @@ DBG OPTION BREAK 3
 DIM STRING NC_PATH.NC = MM.INFO$(PATH)     'path to NC executable
 
 CONST MIN_FW_VERSION.NC = 5.06
+CONST MIN_TUI_VERSION.NC = 0.45
 OPTION EXPLICIT
 OPTION DEFAULT NONE
 OPTION BASE 0
@@ -114,7 +115,7 @@ DIM INTEGER CFG_ExtAct.NC = 0
 DIM INTEGER CFG_ESCup.NC = 0
 DIM INTEGER CFG_DirFil.NC = 0
 DIM INTEGER CFG_TXTfb.NC = 0
-DIM INTEGER CFG_HighColor.NC = 0
+DIM INTEGER CFG_DefaultMode.NC = 0
 DIM INTEGER CFG_FastSerial.NC = 0
 DIM INTEGER CFG_ESP.NC = 0
 
@@ -534,13 +535,14 @@ SUB NCwifi
       IF ESP_SSID.NC <> "" THEN CAT wifi, ",Connect to " + ESP_SSID.NC
     ENDIF
     LOCAL INTEGER wifiChoice = TUIchoice("WIFI", wifi)
+
     SELECT CASE wifiChoice
       CASE 0
         'connect to
         ssid = TUIinput("NETWORK CREDENTIALS", "Network name (SSID):", ESP_SSID.NC, WIFICHARS.NC)
         pass = TUIinput("NETWORK CREDENTIALS", "Password for " + ssid + ":", ESP_PASS.NC, WIFICHARS.NC)
-        IF ssid <> "" THEN
-          dialog = TUIwaitingON("WIFI CONNECTING TO '" + ssid + "' WITH PASSWORD '" + pass "'")
+        IF ssid<>"" THEN
+          dialog = TUIwaitingON("WIFI CONNECTING TO '" + ssid + "' WITH PASSWORD '" + pass + "'")
           NCespConnect(ssid, pass)
           IF WIFI.NC THEN
             ESP_SSID.NC = ssid
@@ -1910,12 +1912,39 @@ SUB NCmakeMAR
   TUIwaitingOFF(ccc)
 END SUB
 
+SUB NCprepareMode
+  IF CFG_DefaultMode.NC THEN
+    MODE CFG_DefaultMode.NC, 8
+  ELSE
+    SELECT CASE INT(MM.INFO(MODE))
+      CASE 2,3,4,5,6,7,8,13,17
+        MODE 1,8
+    END SELECT
+  ENDIF
+
+  LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
+  EDIT_ROWS.NC = (MM.VRES \ 16) - 2
+  OFFSET.NC = (MM.VRES - 16*(MM.VRES \ 16)) \ 2
+  MAX_ROWS.NC = EDIT_ROWS.NC - 3
+  WITHOUT2.NC = MM.VRES-2*16
+  HALF.NC = MM.HRES \ 2
+  QUART.NC = HALF.NC \ 2
+  MAX_COLS.NC = (HALF.NC \ 8) - 4 
+END SUB
+
 SUB NCinit
   'INIT
 
   IF MM.INFO(VERSION) < MIN_FW_VERSION.NC THEN
     FONT.TUI = 1
-    TUIwarning("VERSION CHECK", "FW version >= " + STR$(MIN_FW_VERSION.NC,1,2) + " needed, you have " + STR$(MM.INFO(VERSION), 1, 2))
+    TUIwarning("FW VERSION CHECK", "FW version>=" + STR$(MIN_FW_VERSION.NC,1,2) + " needed, you have " + STR$(MM.INFO(VERSION), 1, 2))
+    OPTION BREAK 3
+    END
+  ENDIF
+
+  IF VAL(VERSION.TUI)<MIN_TUI_VERSION.NC THEN
+    FONT.TUI = 1
+    TUIwarning("TUI VERSION CHECK", "TUI version>=" + STR$(MIN_TUI_VERSION.NC,1,2) + " needed, you have " + VERSION.TUI)
     OPTION BREAK 3
     END
   ENDIF
@@ -1926,15 +1955,9 @@ SUB NCinit
   NEXT i
 
   INIT.NC = 1
-  NCinitMenu 
   NCconfigLoad
-  SELECT CASE INT(MM.INFO(MODE))
-    CASE 2,3,4,5,6,7,8,13,17
-      MODE 1,16
-
-  END SELECT
-
-  LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
+  NCprepareMode
+  NCinitMenu 
 
   CURSOR.NC(0) = 0
   CURSOR.NC(1) = 0       'left and right cursor
@@ -1956,13 +1979,6 @@ SUB NCinit
   ELSE
     FONT #8,1
   ENDIF
-  EDIT_ROWS.NC = (MM.VRES \ 16) - 2
-  OFFSET.NC = (MM.VRES - 16*(MM.VRES \ 16)) \ 2
-  MAX_ROWS.NC = EDIT_ROWS.NC - 3
-  WITHOUT2.NC = MM.VRES-2*16
-  HALF.NC = MM.HRES \ 2
-  QUART.NC = HALF.NC \ 2
-  MAX_COLS.NC = (HALF.NC \ 8) - 4 
   CLS RGB(NOTBLACK)
   NCdrawMenu
 
@@ -2528,13 +2544,13 @@ SUB NCfKeys(fkey AS INTEGER)
         LOCAL STRING about(10) LENGTH 100
         LOCAL STRING myVer = STR$(MM.INFO(VERSION), 1, 2) + "." + RIGHT$(STR$(MM.INFO(VERSION) * 10000, 5, 0),2)
         LOCAL STRING myCMM2 = MM.DEVICE$ + " (" + LEFT$(STR$(MM.INFO(CPUSPEED)), 3) + "MHz), v" + myVer
-        about(0) = "              My name is Napoleon Commander (" + NCdigital(VERSION.NC) + ")"
+        about(0) = "              My name is Napoleon Commander (v" + VERSION.NC + ")"
         about(1) = ""
         about(2) = "              Born on: 7. November 2020"
         about(3) = "              Where  : Czech Republic"
         about(4) = "              Father : " + "JirSoft" + CHR$(158)
         about(5) = "              Sisters: TUI.INC v" + VERSION.TUI + ", GRF.INC v" + VERSION.GRF
-        about(6) = ""
+        about(6) = "              World  : " + NCgetResFromMode()
         about(7) = ""
         about(8) = "I'm living inside of " + myCMM2
         IF ESP_VERSION.NC <> "" THEN
@@ -4091,6 +4107,7 @@ SUB NCsort(side AS INTEGER)
   'sort dir (need speed up, SORT()???)
 
   IF UNSORT.NC THEN EXIT SUB
+  IF COUNT.NC(side)<2 THEN EXIT SUB
   LOCAL INTEGER i
   
   IF MM.INFO(VERSION)<5.06 THEN
@@ -4175,88 +4192,6 @@ FUNCTION NCprepareLogo(f AS STRING) AS INTEGER
   ENDIF
 END FUNCTION
 
-SUB NCconfig
-  'configure NC
-
-  LOCAL STRING txt = "External viewers enabled"
-        txt = txt + ",External actions enabled"
-        txt = txt + ",ESC to parent dir"
-        txt = txt + ",DIRs before FILEs"
-        txt = txt + ",TEXT VIEWER fallback (HEX else)"
-        txt = txt + ",HIGH COLOR mode"
-        txt = txt + ",FAST SERIAL SERVER (691200 baud)"
-        txt = txt + ",ESP8266 installed"
-     
-  LOCAL INTEGER sel = NCconfigPack()
-  LOCAL INTEGER oldSel = sel
-  sel = TUIselect("CONFIGURATION",txt,sel)
-  NCconfigUnpack(sel)
-  
-  oldSel = sel XOR oldSel 'difference between OLD and NEW settings  
-  IF oldSel AND 32 THEN
-    IF CFG_HighColor.NC THEN
-      'MODE 1,16
-    ELSE
-      'MODE 1,8
-    ENDIF
-    FONT 8
-    LOGO.NC = NCprepareLogo("NAPOLEON.SPR")
-  ENDIF
-
-  IF oldSel AND 64 THEN 
-    IF CFG_FastSerial.NC THEN
-      SERIAL_INIT.NC = "COM3:691200,8050"
-    ELSE
-      SERIAL_INIT.NC = "COM3:230400,8050"
-    ENDIF
-    IF SERIAL_ON.NC THEN CLOSE #1
-    SERIAL_ON.NC = 0
-    NULL_I.NC = NCserialOK()
-  ENDIF
-  
-  IF oldSel AND 128 THEN
-    IF CFG_ESP.NC THEN
-      IF SERIAL_ON.NC THEN
-        ON ERROR SKIP
-        CLOSE #1
-        SERIAL_ON.NC = 0
-      ENDIF
-      NCespTest
-      IF ESP.NC THEN
-        NCespWifiTest
-      ENDIF
-    ELSE
-      IF ESP_ON.NC THEN
-        ON ERROR SKIP
-        CLOSE #1
-        SERIAL_ON.NC = 0
-      ENDIF
-      WIFI.NC = 0
-      ESP.NC = 0
-      ESP_VERSION.NC = ""
-    ENDIF
-  ENDIF
-  IF (oldSel AND 8) OR (oldSel AND 32) THEN 'changed MODE or items sorting
-    NCchangeDir(0,PATH.NC(0))
-    NCchangeDir(1,PATH.NC(1))
-    NCdrawMenu
-    NCdrawCL(ACT_PATH.NC)
-    NCcursor(ACTIVE.NC,1)
-  ENDIF
-  IF oldSel <> 0 THEN 
-    CONFIG.NC = sel
-    NCconfigSave'(sel)
-  ENDIF
-END SUB
-
-FUNCTION NCconfigPack() AS INTEGER
-  'pack config into integer
-
-  NCconfigPack = CFG_ExtView.NC + 2*CFG_ExtAct.NC + 4*CFG_ESCup.NC
-  NCconfigPack = NCconfigPack + 8*CFG_DirFil.NC + 16*CFG_TXTfb.NC + 32*CFG_HighColor.NC
-  NCconfigPack = NCconfigPack + 64*CFG_FastSerial.NC + 128*CFG_ESP.NC
-END FUNCTION
-
 SUB NCconfigSaveOLD(sel AS INTEGER)
   'save config
   OPEN NC_PATH.NC + "NC.CFG" FOR OUTPUT AS #3
@@ -4273,12 +4208,14 @@ END SUB
 SUB NCconfigUnpack(sel AS INTEGER)
   'unpack config from integer
 
+  LOCAL INTEGER null
+
   CFG_ExtView.NC = (sel AND 1) > 0 
   CFG_ExtAct.NC = (sel AND 2) > 0
   CFG_ESCup.NC = (sel AND 4) > 0
   CFG_DirFil.NC = (sel AND 8) > 0
   CFG_TXTfb.NC = (sel AND 16) > 0
-  CFG_HighColor.NC = (sel AND 32) > 0
+  null = (sel AND 32) > 0
   CFG_FastSerial.NC = (sel AND 64) > 0 
   CFG_ESP.NC = (sel AND 128) > 0 
 END SUB
@@ -4290,19 +4227,15 @@ SUB NCconfigSave
   ?#3, "'Napoleon Commander configuration saved on " + DATE$ + " at " + TIME$
   ?#3
 
-  ?#3, "#colors"
-  ?#3, "'use 256 or 65536 colors"
-  IF CFG_HighColor.NC THEN
-    ?#3, "65536"
-  ELSE
-    ?#3, "256"
-  ENDIF
+  ?#3, "#default mode"
+  ?#3, "'0...current mode"
+  ?#3, CFG_DefaultMode.NC
   ?#3
 
   ?#3, "#server"
   ?#3, "'use ESP8266 (when fitted) or serial port"
   IF CFG_ESP.NC THEN
-    ?#3, "ESP"
+    ?#3, "ESP8266"
   ELSE
     ?#3, "serial"
   ENDIF
@@ -4376,6 +4309,370 @@ SUB NCconfigSave
   CLOSE #3
 END SUB
 
+SUB NCdrawMenuPart(fn AS INTEGER)
+  'draws menu at bottom
+
+  LOCAL INTEGER back, position = MM.HRES \ 12, offset = (MM.HRES - 12*position) \ 2, xx
+
+  IF EN_MENU.NC(fn-1, ALT.NC) THEN
+    back = RGB(CYAN)
+  ELSE
+    back = RGB(GRAY)
+  ENDIF
+
+  IF MENU.NC(fn-1, ALT.NC) <> "" THEN
+    xx = offset + (fn - 1) * position
+    TEXT xx, MM.VRES-16, STR$(fn,0,0),,,, RGB(WHITE), RGB(NOTBLACK)
+    xx = xx + 8
+    IF fn > 9 THEN xx = xx + 8  
+    IF ALT.NC THEN
+      TEXT xx,MM.VRES-16, MENU.NC(fn-1, 1),,,,RGB(NOTBLACK),back
+    ELSE
+      TEXT xx,MM.VRES-16, MENU.NC(fn-1, 0),,,,RGB(NOTBLACK),back
+    ENDIF
+  END IF
+END SUB
+
+SUB NCinitMenu
+  IF MM.HRES>=1920 THEN
+    '18 chars per menu
+    NCsetMenu(1, "Show Help Text", 0, 1)
+    NCsetMenu(2, "Get File Info", 0, 1)
+    NCsetMenu(3, "File Viewer" , 0, 1)
+    NCsetMenu(4, "HEX editor" , 0, 1)
+    NCsetMenu(5, "Copy File"   , 0, 1)
+    NCsetMenu(6, "Rename File", 0, 1)
+    NCsetMenu(7, "New Directory", 0, 1)
+    NCsetMenu(8, "Delete File", 0, 1)
+    NCsetMenu(9, "Make MAR Archive", 0, 1)
+    NCsetMenu(10,"Info about NC", 0, 1)
+    NCsetMenu(11,"Configure NC", 0, 1)
+    NCsetMenu(12,"LeftPane=RightPane", 0, 1)
+    NCsetMenu(1, "Source Left Pane", 1, 1)
+    NCsetMenu(2, "Source Right Pane", 1, 1)
+    NCsetMenu(3, "HEX viewer", 1, 1)
+    NCsetMenu(4, "BASIC Help", 1, 1)
+    NCsetMenu(5, "Move File", 1, 1)
+    NCsetMenu(6, "Rename File", 1, 1)
+    NCsetMenu(7, "New Directory", 1, 1)
+    NCsetMenu(8, "Delete File", 1, 1)
+    NCsetMenu(9, "Compress to File", 1, 1)
+    NCsetMenu(10,"Quit NC", 1, 1)
+    DBG NCsetMenu(11, "DEBUG", 1, 1)
+    NCsetMenu(12,"Set WiFi Network", 1, ESP.NC)
+
+  ELSEIF MM.HRES>=1280 THEN
+    '11 chars per menu
+    NCsetMenu(1, "Help Text", 0, 1)
+    NCsetMenu(2, "Get Info", 0, 1)
+    NCsetMenu(3, "Viewer" , 0, 1)
+    NCsetMenu(4, "HEX editor" , 0, 1)
+    NCsetMenu(5, "Copy File"   , 0, 1)
+    NCsetMenu(6, "Rename File", 0, 1)
+    NCsetMenu(7, "New Dir", 0, 1)
+    NCsetMenu(8, "Delete File", 0, 1)
+    NCsetMenu(9, "Make MAR", 0, 1)
+    NCsetMenu(10,"About NC", 0, 1)
+    NCsetMenu(11,"Config NC", 0, 1)
+    NCsetMenu(12,"Left=Right", 0, 1)
+    NCsetMenu(1, "Source LP", 1, 1)
+    NCsetMenu(2, "Source RP", 1, 1)
+    NCsetMenu(3, "HEX viewer", 1, 1)
+    NCsetMenu(4, "BASIC Help", 1, 1)
+    NCsetMenu(5, "Move File", 1, 1)
+    NCsetMenu(6, "Rename File", 1, 1)
+    NCsetMenu(7, "New Dir", 1, 1)
+    NCsetMenu(8, "Delete File", 1, 1)
+    NCsetMenu(9, "Compression", 1, 1)
+    NCsetMenu(10,"Quit NC", 1, 1)
+    DBG NCsetMenu(11, "DEBUG", 1, 1)
+    NCsetMenu(12,"Config WiFi", 1, ESP.NC)
+
+  ELSEIF Mm.HRES>=960 THEN
+    '8 chars per menu
+    NCsetMenu(1, "Help Txt", 0, 01)
+    NCsetMenu(2, "Get Info", 0, 1)
+    NCsetMenu(3, "Viewer" , 0, 1)
+    NCsetMenu(4, "HEX edit" , 0, 1)
+    NCsetMenu(5, "CopyFile"   , 0, 1)
+    NCsetMenu(6, "Rename", 0, 1)
+    NCsetMenu(7, "New Dir", 0, 1)
+    NCsetMenu(8, "Delete", 0, 1)
+    NCsetMenu(9, "Make MAR", 0, 1)
+    NCsetMenu(10,"AboutNC", 0, 1)
+    NCsetMenu(11,"Config", 0, 1)
+    NCsetMenu(12,"LPa=RPa", 0, 1)
+    NCsetMenu(1, "SourceLP", 1, 1)
+    NCsetMenu(2, "SourceRP", 1, 1)
+    NCsetMenu(3, "Viev HEX", 1, 1)
+    NCsetMenu(4, "Hlp BAS", 1, 1)
+    NCsetMenu(5, "MoveFile", 1, 1)
+    NCsetMenu(6, "Rename", 1, 1)
+    NCsetMenu(7, "New Dir", 1, 1)
+    NCsetMenu(8, "Delete", 1, 1)
+    NCsetMenu(9, "Compres", 1, 1)
+    NCsetMenu(10,"Quit NC", 1, 1)
+    DBG NCsetMenu(11, "DEBUG", 1, 1)
+    NCsetMenu(12,"Set WiFi", 1, ESP.NC)
+
+  ELSE
+    '6 chars per menu
+    NCsetMenu(1, "Help", 0, 1)
+    NCsetMenu(2, "GetInf", 0, 1)
+    NCsetMenu(3, "Viewer" , 0, 1)
+    NCsetMenu(4, "EdiHEX" , 0, 1)
+    NCsetMenu(5, "Copy"   , 0, 1)
+    NCsetMenu(6, "Rename", 0, 1)
+    NCsetMenu(7, "NewDir", 0, 1)
+    NCsetMenu(8, "Delete", 0, 1)
+    NCsetMenu(9, "MakMAR", 0, 1)
+    NCsetMenu(10,"About", 0, 1)
+    NCsetMenu(11,"Config", 0, 1)
+    NCsetMenu(12,"LP=RP", 0, 1)
+    NCsetMenu(1, "SourLP", 1, 1)
+    NCsetMenu(2, "SourRP", 1, 1)
+    NCsetMenu(3, "VieHEX", 1, 1)
+    NCsetMenu(4, "HlpBAS", 1, 1)
+    NCsetMenu(5, "Move", 1, 1)
+    NCsetMenu(6, "Rename", 1, 1)
+    NCsetMenu(7, "NewDir", 1, 1)
+    NCsetMenu(8, "Delete", 1, 1)
+    NCsetMenu(9, "Comprs", 1, 1)
+    NCsetMenu(10,"QuitNC", 1, 1)
+    DBG NCsetMenu(11, "DEBUG", 1, 1)
+    NCsetMenu(12,"WiFi", 1, ESP.NC)
+  ENDIF
+END SUB
+
+
+SUB NCsetMenu(n AS INTEGER, t AS STRING, alt AS INTEGER, e AS INTEGER)
+  'set name of F-key menu
+
+  LOCAL INTEGER ll = 6
+  IF MM.HRES>=1920 THEN
+    ll = 18
+  ELSEIF MM.HRES>=1280 THEN
+    ll=11
+  ELSEIF MM.HRES>=960 THEN
+    ll=8
+  ENDIF
+  IF n>0 THEN
+    IF n<13 THEN
+      MENU.NC(n-1, alt) = LEFT$(t + SPACE$(ll), ll)
+      EN_MENU.NC(n-1, alt) = e
+    END IF
+  END IF
+END SUB
+
+SUB NCconfig
+  'configure NC
+
+  LOCAL STRING txt
+  LOCAL INTEGER sel, sel2, c0, c1, c2, c3, c4, c5, c6, c7
+
+  c0 = CFG_ExtView.NC
+  c1 = CFG_ExtAct.NC
+  c2 = CFG_ESCup.NC
+  c3 = CFG_DirFil.NC
+  c4 = CFG_TXTfb.NC
+  c5 = CFG_DefaultMode.NC
+  c6 = CFG_FastSerial.NC
+  c7 = CFG_ESP.NC
+
+  DO 
+    txt = NCprepareConfig()
+    sel = TUIchoice("CONFIGURATION",txt)
+    SELECT CASE sel
+      CASE 0
+        sel2 = TUIchoice("EXTERNAL VIEWER", "enabled,disabled")
+        IF sel2>=0 THEN
+          CFG_ExtView.NC = 1 - sel2
+        ENDIF
+        
+      CASE 1
+        sel2 = TUIchoice("EXTERNAL ACTION", "enabled,disabled")
+        IF sel2>=0 THEN
+          CFG_ExtAct.NC = 1 - sel2
+        ENDIF
+
+      CASE 2
+        sel2 = TUIchoice("ESC jumps to parent DIR", "yes,no")
+        IF sel2>=0 THEN
+          CFG_ESCup.NC = 1 - sel2
+        ENDIF
+
+      CASE 3
+        sel2 = TUIchoice("LIST DIRs/FILEs SORT", "DIRs first,mixed")
+        IF sel2>=0 THEN
+          CFG_DirFil.NC = 1 - sel2
+        ENDIF
+
+      CASE 4
+        sel2 = TUIchoice("VIEWER fallback", "HEX,text")
+        IF sel2>=0 THEN
+          CFG_TXTfb.NC = sel2
+        ENDIF
+
+      CASE 5
+        sel2 = TUIchoice("Default display MODE", "current,800x600,960x540,1024x768,1280x720,1280x1024,1920x1080 (G2 only)")
+        IF sel2>=0 THEN
+          SELECT CASE sel2
+            CASE 0,1
+              CFG_DefaultMode.NC = sel2
+
+            CASE 2
+              CFG_DefaultMode.NC = 12
+
+            CASE 3
+              CFG_DefaultMode.NC = 9
+
+            CASE 4
+              CFG_DefaultMode.NC = 11
+
+            CASE 5
+              CFG_DefaultMode.NC = 15
+
+            CASE 6
+              IF INSTR(MM.DEVICE$, "G2") THEN
+                CFG_DefaultMode.NC = 16
+              ELSE
+                CFG_DefaultMode.NC = 15
+              ENDIF
+          END SELECT
+        ENDIF
+
+      CASE 6
+        sel2 = TUIchoice("SERIAL SERVER speed", "691200 baud,230400 baud")
+        IF sel2>=0 THEN
+          CFG_FastSerial.NC = sel2
+        ENDIF
+
+      CASE 7      
+        sel2 = TUIchoice("SERVER in use", "ESP8266,serial")
+        IF sel2>=0 THEN
+          CFG_ESP.NC = 1 - sel2
+        ENDIF
+
+    END SELECT
+  LOOP WHILE sel>=0
+
+  IF sel=-ASC(ENTER.NC) THEN 'ENTER
+    'NCoutDebug("CONFIG")
+    'NCoutDebug(STR$(c0)+STR$(c1)+STR$(c2)+STR$(c3)+STR$(c4)+STR$(c5)+STR$(c6)+STR$(c7))
+    'NCoutDebug(STR$(CFG_ExtView.NC)+STR$(CFG_ExtAct.NC)+STR$(CFG_ESCup.NC)+STR$(CFG_DirFil.NC)+STR$(CFG_TXTfb.NC)+STR$(CFG_DefaultMode.NC)+STR$(CFG_FastSerial.NC)+STR$(CFG_ESP.NC))
+
+    IF c5<>CFG_DefaultMode.NC THEN
+      IF CFG_DefaultMode.NC<>0 THEN
+        NCprepareMode
+        FONT 8
+      ENDIF
+    ENDIF
+        
+    IF c6<>CFG_FastSerial.NC THEN
+      IF CFG_FastSerial.NC THEN
+        SERIAL_INIT.NC = "COM3:691200,8050"
+      ELSE
+        SERIAL_INIT.NC = "COM3:230400,8050"
+      ENDIF
+      IF SERIAL_ON.NC THEN CLOSE #1
+      SERIAL_ON.NC = 0
+      NULL_I.NC = NCserialOK()
+    ENDIF
+  
+    IF c7<>CFG_ESP.NC THEN
+      IF CFG_ESP.NC THEN
+        IF SERIAL_ON.NC THEN
+          ON ERROR SKIP
+          CLOSE #1
+          SERIAL_ON.NC = 0
+        ENDIF
+        NCespTest
+        IF ESP.NC THEN
+          NCespWifiTest
+        ENDIF
+      ELSE
+        IF ESP_ON.NC THEN
+          ON ERROR SKIP
+          CLOSE #1
+          SERIAL_ON.NC = 0
+        ENDIF
+        WIFI.NC = 0
+        ESP.NC = 0
+        ESP_VERSION.NC = ""
+      ENDIF
+    ENDIF
+  
+    IF c3<>CFG_DirFil.NC OR c5<>CFG_DefaultMode.NC THEN
+      NCchangeDir(0,PATH.NC(0))
+      NCchangeDir(1,PATH.NC(1))
+      NCinitMenu
+      NCdrawMenu
+      NCdrawCL(ACT_PATH.NC)
+      NCcursor(ACTIVE.NC,1)
+    ENDIF
+
+    NCconfigSave
+  ENDIF
+END SUB
+
+FUNCTION NCprepareConfig() AS STRING
+  NCprepareConfig = "External viewers "
+  IF CFG_ExtView.NC THEN
+    CAT NCprepareConfig, "[enabled]"
+  ELSE
+    CAT NCprepareConfig, "[disabled]"
+  ENDIF
+
+  CAT NCprepareConfig, ",External actions "
+  IF CFG_ExtAct.NC THEN
+    CAT NCprepareConfig, "[enabled]"
+  ELSE
+    CAT NCprepareConfig, "[disabled]"
+  ENDIF
+
+  CAT NCprepareConfig, ",ESC jumps to parent dir "
+  IF CFG_ESCup.NC THEN
+    CAT NCprepareConfig, "[yes]"
+  ELSE
+    CAT NCprepareConfig, "[no]"
+  ENDIF
+
+  CAT NCprepareConfig, ",LIST SORTING "
+  IF CFG_DirFil.NC THEN
+    CAT NCprepareConfig, "[DIRs first]"
+  ELSE
+    CAT NCprepareConfig, "[mixed]"
+  ENDIF
+
+  CAT NCprepareConfig, ",VIEWER fallback "
+  IF CFG_TXTfb.NC THEN
+    CAT NCprepareConfig, "[text]"
+  ELSE
+    CAT NCprepareConfig, "[HEX]"
+  ENDIF
+
+  CAT NCprepareConfig, ",Display MODE "
+  IF CFG_DefaultMode.NC THEN
+     CAT NCprepareConfig, "[" + NCgetResFromMode() + "]"
+  ELSE
+    CAT NCprepareConfig, "[current]"
+  ENDIF
+
+  CAT NCprepareConfig, ",SERVER speed "
+  IF CFG_FastSerial.NC THEN
+    CAT NCprepareConfig, "[691200 baud]"
+  ELSE
+    CAT NCprepareConfig, "[230400 baud]"
+  ENDIF
+
+  CAT NCprepareConfig, ",SERVER used "
+  IF CFG_ESP.NC THEN
+    CAT NCprepareConfig, "[ESP8266]"
+  ELSE
+    CAT NCprepareConfig, "[serial]"
+  ENDIF
+END FUNCTION
+
 SUB NCconfigLoad
   'load config
 
@@ -4399,10 +4696,10 @@ SUB NCconfigLoad
             ELSE
               SELECT CASE command
                 CASE "server"
-                  CFG_ESP.NC = (sCfg="ESP")
+                  CFG_ESP.NC = (sCfg="ESP8266")
                   
-                CASE "colors"
-                  CFG_HighColor.NC = (sCfg="65536")
+                CASE "default mode"
+                  CFG_DefaultMode.NC = VAL(sCfg)
 
                 CASE "serial speed"
                   CFG_FastSerial.NC = (sCfg="691200")
@@ -4429,7 +4726,7 @@ SUB NCconfigLoad
                   ESP_PASS.NC = sCfg
 
                 CASE ELSE
-                  ERROR "UNKNOWN CONFIG COMMAND: >" + command + "<"
+                  'ERROR "UNKNOWN CONFIG COMMAND: >" + command + "<"
 
               END SELECT
             ENDIF
@@ -4474,180 +4771,13 @@ SUB NCconfigLoad
   ENDIF
 END SUB
 
-SUB NCdrawMenuPartOLD(fn AS INTEGER)
-  'draws menu at bottom
-  LOCAL INTEGER back, xx = 2
-
-  IF EN_MENU.NC(fn-1) THEN
-    back = RGB(CYAN)
+FUNCTION NCgetResFromMode(m AS INTEGER) AS STRING
+  IF m=0 THEN
+    NCgetResFromMode = STR$(MM.HRES) + "x" + STR$(MM.VRES)
+  ELSEIF m>17 THEN
+    NCgetResFromMode = ""
   ELSE
-    back = RGB(GRAY)
+    NCgetResFromMode = FIELD$("800x600,640x400,320x200,480x432,240x216,256x240,320x240,640x480,1024x768,848x480,1280x720,960x540,400x300,960x540,1280x1024,1920x1080,384x240",m,",")
   ENDIF
-
-  IF MENU.NC(fn-1) <> "" THEN
-    xx = 4 + (fn - 1) * 56
-    IF fn > 1 THEN xx = xx +  (fn-1)*9
-    IF fn > 10 THEN xx = xx + (fn-10) *8 
-    TEXT xx, MM.VRES-16, STR$(fn,0,0),,,, RGB(WHITE), RGB(NOTBLACK)
-    xx = xx + 8
-    IF fn > 9 THEN xx = xx + 8  
-    TEXT xx,MM.VRES-16, MENU.NC(fn-1),,,,RGB(NOTBLACK),back
-  END IF
-END SUB
-
-SUB NCdrawMenuPart(fn AS INTEGER)
-  'draws menu at bottom
-
-  LOCAL INTEGER back, position = MM.HRES \ 12, offset = (MM.HRES - 12*position) \ 2, xx
-
-  IF EN_MENU.NC(fn-1, ALT.NC) THEN
-    back = RGB(CYAN)
-  ELSE
-    back = RGB(GRAY)
-  ENDIF
-
-  IF MENU.NC(fn-1, ALT.NC) <> "" THEN
-    xx = offset + (fn - 1) * position
-    TEXT xx, MM.VRES-16, STR$(fn,0,0),,,, RGB(WHITE), RGB(NOTBLACK)
-    xx = xx + 8
-    IF fn > 9 THEN xx = xx + 8  
-    IF ALT.NC THEN
-      TEXT xx,MM.VRES-16, MENU.NC(fn-1, 1),,,,RGB(NOTBLACK),back
-    ELSE
-      TEXT xx,MM.VRES-16, MENU.NC(fn-1, 0),,,,RGB(NOTBLACK),back
-    ENDIF
-  END IF
-END SUB
-
-SUB NCinitMenu
-  IF MM.HRES>=1920 THEN
-    '18 chars per menu
-    NCsetMenu(1, "Show Help Text", 0, 01)
-    NCsetMenu(2, "Get File Info", 0, 1)
-    NCsetMenu(3, "File Viewer" , 0, 1)
-    NCsetMenu(4, "HEX editor" , 0, 1)
-    NCsetMenu(5, "Copy File"   , 0, 1)
-    NCsetMenu(6, "Rename File", 0, 1)
-    NCsetMenu(7, "New Directory", 0, 1)
-    NCsetMenu(8, "Delete File", 0, 1)
-    NCsetMenu(9, "Make MAR Archive", 0, 1)
-    NCsetMenu(10, "Quit NC", 0, 1)
-    NCsetMenu(11,"Configure NC", 0, 1)
-    NCsetMenu(12,"LeftPane=RightPane", 0, 1)
-    NCsetMenu(1, "Source Left Pane", 1, 1)
-    NCsetMenu(2, "Source Right Pane", 1, 1)
-    NCsetMenu(3, "HEX viewer", 1, 1)
-    NCsetMenu(4, "BASIC Help", 1, 1)
-    NCsetMenu(5, "Move File", 1, 1)
-    NCsetMenu(6, "Rename File", 1, 1)
-    NCsetMenu(7, "New Directory", 1, 1)
-    NCsetMenu(8, "Delete File", 1, 1)
-    NCsetMenu(9, "Compress to File", 1, 1)
-    NCsetMenu(10, "Quit NC", 1, 1)
-    DBG NCsetMenu(11, "DEBUG", 1, 1)
-    NCsetMenu(12,"Set WiFi Network", ESP.NC)
-
-  ELSEIF MM.HRES>=1280 THEN
-    '11 chars per menu
-    NCsetMenu(1, "Help Text", 0, 01)
-    NCsetMenu(2, "Get Info", 0, 1)
-    NCsetMenu(3, "Viewer" , 0, 1)
-    NCsetMenu(4, "HEX editor" , 0, 1)
-    NCsetMenu(5, "Copy File"   , 0, 1)
-    NCsetMenu(6, "Rename File", 0, 1)
-    NCsetMenu(7, "New Dir", 0, 1)
-    NCsetMenu(8, "Delete File", 0, 1)
-    NCsetMenu(9, "Make MAR", 0, 1)
-    NCsetMenu(10, "Quit NC", 0, 1)
-    NCsetMenu(11,"Config NC", 0, 1)
-    NCsetMenu(12,"Left=Right", 0, 1)
-    NCsetMenu(1, "Source LP", 1, 1)
-    NCsetMenu(2, "Source RP", 1, 1)
-    NCsetMenu(3, "HEX viewer", 1, 1)
-    NCsetMenu(4, "BASIC Help", 1, 1)
-    NCsetMenu(5, "Move File", 1, 1)
-    NCsetMenu(6, "Rename File", 1, 1)
-    NCsetMenu(7, "New Dir", 1, 1)
-    NCsetMenu(8, "Delete File", 1, 1)
-    NCsetMenu(9, "Compression", 1, 1)
-    NCsetMenu(10, "Quit NC", 1, 1)
-    DBG NCsetMenu(11, "DEBUG", 1, 1)
-    NCsetMenu(12,"Set WiFi", ESP.NC)
-
-  ELSEIF Mm.HRES>=960 THEN
-    '8 chars per menu
-    NCsetMenu(1, "Help Txt", 0, 01)
-    NCsetMenu(2, "Get Info", 0, 1)
-    NCsetMenu(3, "Viewer" , 0, 1)
-    NCsetMenu(4, "HEX edit" , 0, 1)
-    NCsetMenu(5, "CopyFile"   , 0, 1)
-    NCsetMenu(6, "Rename", 0, 1)
-    NCsetMenu(7, "New Dir", 0, 1)
-    NCsetMenu(8, "Delete", 0, 1)
-    NCsetMenu(9, "Make MAR", 0, 1)
-    NCsetMenu(10, "Quit NC", 0, 1)
-    NCsetMenu(11,"Config", 0, 1)
-    NCsetMenu(12,"LPa=RPa", 0, 1)
-    NCsetMenu(1, "SourceLP", 1, 1)
-    NCsetMenu(2, "SourceRP", 1, 1)
-    NCsetMenu(3, "Viev HEX", 1, 1)
-    NCsetMenu(4, "Hlp BAS", 1, 1)
-    NCsetMenu(5, "MoveFile", 1, 1)
-    NCsetMenu(6, "Rename", 1, 1)
-    NCsetMenu(7, "New Dir", 1, 1)
-    NCsetMenu(8, "Delete", 1, 1)
-    NCsetMenu(9, "Compres", 1, 1)
-    NCsetMenu(10, "Quit NC", 1, 1)
-    DBG NCsetMenu(11, "DEBUG", 1, 1)
-    NCsetMenu(12,"Set WiFi", ESP.NC)
-
-  ELSE
-    '6 chars per menu
-    NCsetMenu(1, "Help", 0, 01)
-    NCsetMenu(2, "GetInf", 0, 1)
-    NCsetMenu(3, "Viewer" , 0, 1)
-    NCsetMenu(4, "EdiHEX" , 0, 1)
-    NCsetMenu(5, "Copy"   , 0, 1)
-    NCsetMenu(6, "Rename", 0, 1)
-    NCsetMenu(7, "NewDir", 0, 1)
-    NCsetMenu(8, "Delete", 0, 1)
-    NCsetMenu(9, "MakMAR", 0, 1)
-    NCsetMenu(10, "QuitNC", 0, 1)
-    NCsetMenu(11,"Config", 0, 1)
-    NCsetMenu(12,"LP=RP", 0, 1)
-    NCsetMenu(1, "SourLP", 1, 1)
-    NCsetMenu(2, "SourRP", 1, 1)
-    NCsetMenu(3, "VieHEX", 1, 1)
-    NCsetMenu(4, "HlpBAS", 1, 1)
-    NCsetMenu(5, "Move", 1, 1)
-    NCsetMenu(6, "Rename", 1, 1)
-    NCsetMenu(7, "NewDir", 1, 1)
-    NCsetMenu(8, "Delete", 1, 1)
-    NCsetMenu(9, "Comprs", 1, 1)
-    NCsetMenu(10, "QuitNC", 1, 1)
-    DBG NCsetMenu(11, "DEBUG", 1, 1)
-    NCsetMenu(12,"WiFi", ESP.NC)
-  ENDIF
-END SUB
-
-
-SUB NCsetMenu(n AS INTEGER, t AS STRING, alt AS INTEGER, e AS INTEGER)
-  'set name of F-key menu
-
-  LOCAL INTEGER ll = 6
-  IF MM.HRES>=1920 THEN
-    ll = 18
-  ELSEIF MM.HRES>=1280 THEN
-    ll=11
-  ELSEIF MM.HRES>=960 THEN
-    ll=8
-  ENDIF
-  IF n>0 THEN
-    IF n<13 THEN
-      MENU.NC(n-1, alt) = LEFT$(t + SPACE$(ll), ll)
-      EN_MENU.NC(n-1, alt) = e
-    END IF
-  END IF
-END SUB
-
-
+END FUNCTION
+    
