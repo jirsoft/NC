@@ -36,6 +36,11 @@ NCserver.py -s <serverdir> -p <portname> -b <baudrate>
 ```
 
 ### VERSION HISTORY
+#### v1.40
+	proportional text viewer on ALT F4
+	speedup for ASCII text viewer (F3), total amount of pages is not precalculated anymore
+	bugfixes
+	
 #### v1.38
 	better resolution configuration
 	improved config system (old will be converted on-the-fly)
