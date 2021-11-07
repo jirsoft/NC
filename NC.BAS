@@ -1,5 +1,5 @@
 'Napoleon Commander
-CONST VERSION.NC = "1.38"
+CONST VERSION.NC = "1.40"
 
 #DEFINE "DBG ", "'"
 '#DEFINE "DBG ", ""
@@ -27,8 +27,11 @@ NCchdir NC_PATH.NC
 
 '#INCLUDE "../LIB/TUI.INC"
 '#INCLUDE "../LIB/GRF.INC"
+'#INCLUDE "../LIB/PropText.INC"
+
 #INCLUDE "TUI.INC"
 #INCLUDE "GRF.INC"
+#INCLUDE "PropText.INC"
 #INCLUDE "VIEWER.INC"
 #INCLUDE "ACTION.INC"
 
@@ -741,7 +744,7 @@ SUB NChelp
       shrt(15) = "        F1  Displays HELP screen(s)"
       shrt(16) = "        F2  Gets size for DIR, info for FILE"
       shrt(17) = "        F3  Quick (& dirty) TEXT file viewer, ALT+F3 forces HEX viewer"
-      shrt(18) = "        F4  Simple HEX editor, ALT+F4 starts BASIC helpers"
+      shrt(18) = "        F4  Simple HEX editor, ALT+F4 PROPORTIONAL text viewer"
       shrt(19) = "        F5  Copies FILE or DIR, ALT+F5 moves"
       shrt(20) = "        F6  Renames FILE or DIR"
       shrt(21) = "        F7  Creates new DIRECTORY"
@@ -1171,7 +1174,6 @@ SUB NCcursor(side AS INTEGER, show AS INTEGER)
     fcol = RGB(WHITE) 'file
   ENDIF
   IF show THEN
-    'TEXT 400*side+200,0," "+short+" ","CT",,,RGB(BLUE),RGB(WHITE)
     IF hid THEN
       TEXT HALF.NC*side+8, 16*(CURSOR.NC(side)+1),NCout(ITEM.NC(side,CURSOR.NC(side)+POS.NC(side))),,,,RGB(BLUE),RGB(RED)
     ELSE
@@ -1315,7 +1317,7 @@ SUB NCviewHEX(filePath AS STRING)
     cnt = 0 
     row = 0
   
-    TEXT 400,600-16," Position " + HEX$(po,8) + " of " + HEX$(si,8) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
+    TEXT HALF.NC, MM.VRES-16," Position " + HEX$(po,8) + " of " + HEX$(si,8) + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
 
     PAGE WRITE 1
     BOX 0,16,MM.HRES,WITHOUT2.NC,0,,RGB(CYAN)
@@ -1374,108 +1376,6 @@ SUB NCviewBackground(filePath AS STRING)
   LINE 0,MM.VRES-8,MM.HRES,MM.VRES-8,2,RGB(WHITE)
   TEXT HALF.NC,0," " + filePath + " ","CT",8,,RGB(WHITE),RGB(NOTBLACK)
   TEXT 0,MM.VRES-16,"PgUP/PgDOWN/ESC ","LT",8,,RGB(WHITE),RGB(NOTBLACK)
-END SUB
-
-SUB NCviewTXT(filePath AS STRING)
-  'simple text viewer
-
-  CLOCK.NC = 2
-  NCviewBackground(filePath)
-  CONST lineLength = (MM.HRES \ 8) - 1
-  CONST white = CHR$(8) + CHR$(10) + CHR$(13) + CHR$(32)
-  LOCAL INTEGER firstRow = 16 + OFFSET.NC, filePos = 0, fileSize = MM.INFO(FILESIZE filePath)
-  LOCAL INTEGER maxRow = 0, maxPages, indent = (MM.HRES - 8*lineLength) \ 2
-  LOCAL STRING oneLine = "", ch, k = ""
-  LOCAL INTEGER pages(1000), cntPage = 1, cntChar = 1, change = 0
-
-  'count lines
-  pages(cntPage) = cntChar  
-  OPEN filePath FOR INPUT AS #3
-    maxRow = 0
-    DO WHILE NOT EOF(#3)
-      ch = INPUT$(1, #3)
-      IF ch = LF.NC THEN
-        oneLine = ""
-        INC maxRow
-        IF maxRow = EDIT_ROWS.NC THEN
-          INC cntPage
-          pages(cntPage) = cntChar + 1
-          maxRow = 0
-        ENDIF
-
-      ELSEIF ch <> CR.NC THEN
-        IF LEN(oneLine) < lineLength THEN
-          CAT oneLine, ch
-        ELSE
-          oneLine = ""
-          INC maxRow
-          IF maxRow = EDIT_ROWS.NC THEN
-            INC cntPage
-            pages(cntPage) = cntChar
-            maxRow = 0
-          ENDIF
-        ENDIF
-      ENDIF         
-
-      INC cntChar
-    LOOP
-  CLOSE #3
-  maxPages = cntPage
-  cntPage = 1
-  DO
-    change = 0
-    maxRow = 0
-    BOX 0, 16, MM.HRES, WITHOUT2.NC, 0,, RGB(CYAN)
-    TEXT HALF.NC, MM.VRES-16, " Page " + STR$(cntPage) + "/" + STR$(maxPages) + " ","CT", 8,, RGB(WHITE), RGB(NOTBLACK)
-
-    oneLine = ""
-    OPEN filePath FOR RANDOM AS #3
-      filePos = pages(cntPage)
-      SEEK #3, filePos
-      DO WHILE maxRow < EDIT_ROWS.NC AND filePos <= fileSize
-        ch = INPUT$(1, #3)
-        INC filePos
-        IF ch = LF.NC THEN
-          TEXT indent, firstRow + 16 * maxRow, oneLine, "LT", 8,, RGB(NOTBLACK), RGB(CYAN)
-          oneLine = ""
-          INC maxRow
-
-        ELSEIF ch <> CR.NC THEN
-          IF LEN(oneLine) < lineLength THEN
-            CAT oneLine, ch
-          ELSE
-            TEXT indent, firstRow + 16 * maxRow, oneLine, "LT", 8,, RGB(NOTBLACK), RGB(CYAN)
-            oneLine = ch
-            INC maxRow
-          ENDIF
-        ENDIF
-      LOOP               
-    CLOSE #3
-    IF oneLine <> "" THEN
-      TEXT indent, firstRow + 16 * maxRow, oneLine, "LT", 8,, RGB(NOTBLACK), RGB(CYAN)
-    ENDIF
-    DO WHILE change = 0 AND k<>ESC.NC
-      DO: k = INKEY$: LOOP WHILE k = ""
-      IF k = CHR$(136) THEN
-        'Page UP
-        IF cntPage > 1 THEN 
-          INC cntPage, -1
-          change = 1
-        ENDIF
-
-      ELSEIF k = CHR$(137) THEN
-        'Page DOWN
-        IF cntPage < maxPages THEN 
-          INC cntPage, 1
-          change = 1
-        ENDIF
-      ENDIF
-    LOOP
-  LOOP WHILE k<>ESC.NC
-  NCredrawPane(0)
-  NCredrawPane(1)  
-  NCcursor(ACTIVE.NC,1)
-  NCdrawMenu
 END SUB
 
 SUB NCview
@@ -2374,8 +2274,9 @@ SUB NCfKeys(fkey AS INTEGER)
       IF ALT.NC THEN
         IF NOT NCisDir(SELECTED.NC) THEN
           LOCAL STRING  ex = UCASE$(NCgetExtension(SELECTED.NC))
-          IF ex = "BAS" or ex = "INC" THEN
-            NCbasHelp(ACT_PATH.NC + SEL_NAME.NC)
+          IF ex = "TXT" THEN
+            NCviewPROP(ACT_PATH.NC + SEL_NAME.NC)
+            'NCbasHelp(ACT_PATH.NC + SEL_NAME.NC)
           ENDIF
         ENDIF
       ELSE
@@ -2549,7 +2450,7 @@ SUB NCfKeys(fkey AS INTEGER)
         about(2) = "              Born on: 7. November 2020"
         about(3) = "              Where  : Czech Republic"
         about(4) = "              Father : " + "JirSoft" + CHR$(158)
-        about(5) = "              Sisters: TUI.INC v" + VERSION.TUI + ", GRF.INC v" + VERSION.GRF
+        about(5) = "              Sisters: TUI v" + VERSION.TUI + ", GRF v" + VERSION.GRF + ", PropText v" + VERSION.PROP
         about(6) = "              World  : " + NCgetResFromMode()
         about(7) = ""
         about(8) = "I'm living inside of " + myCMM2
@@ -2580,341 +2481,6 @@ SUB NCfKeys(fkey AS INTEGER)
       ENDIF
 
   END SELECT
-END SUB
-
-SUB NCunARC(source AS STRING)
-  'decompress CMM2 archive file (ARC)
-
-  LOCAL INTEGER arcLen = MM.INFO(FILESIZE source), srcLen = 0, rle, fiPos = 0, i
-  LOCAL STRING header, prev
-  LOCAL STRING dest = NON_PATH.NC + NCgetNoExtension(NCgetName(source))
-
-  IF TUIquestion("UNCOMPRESS ARC","Uncompress '" + NCgetName(source) + "' to '" + NON_PATH.NC + "' ?") THEN
-
-    OPEN source FOR INPUT AS #3
-    LINE INPUT #3, header
-    srcLen = VAL(FIELD$(header, 3, ","))
-    INC fiPos, 2 + LEN(header)
-    CAT dest, "." + FIELD$(header, 2, ",")    
-    SELECT CASE LEFT$(header, 3)
-      CASE "RLE"
-        'RLE, first archiver
-        LOCAL STRING dialog = TUIwaitingON("UNCOMPRESS ARC")
-        TUIwaitingProgress(dialog, 0)
-        OPEN dest FOR OUTPUT AS #4
-        DO WHILE NOT EOF(#3)
-          rle = ASC(INPUT$(1, #3))
-          INC fiPos
-          IF rle < 128 THEN
-            'raw data
-            INC fiPos, rle + 1
-            INC srcLen, rle + 1
-            
-            FOR i = 1 TO rle + 1
-              ?#4,INPUT$(1, #3);
-            NEXT i
-
-          ELSE
-            'compressed data
-            prev = INPUT$(1, #3)
-            INC srcLen, rle - 127
-            INC fiPos
-            FOR i = 1 TO rle - 127
-              ?#4,prev;
-            NEXT i
-          ENDIF
-
-          TUIwaitingProgress(dialog, 100 * fiPos / arcLen)
-        LOOP
-        CLOSE #4 
-        TUIwaitingOFF(dialog)
-    
-      CASE "HUF"
-        'HUFFMAN, slow :-(
-        LOCAL STRING dialog = TUIwaitingON("UNCOMPRESS ARC")
-        LOCAL INTEGER tLen = ASC(INPUT$(1, #3))
-        LOCAL STRING bit(tLen - 1), bb = ""
-        LOCAL INTEGER ind(tLen - 1), bits
-
-        TUIwaitingProgress(dialog, 0)
-
-        ind(0) = ASC(INPUT$(1, #3))
-        bits = ASC(INPUT$(1, #3))
-        bit(0) = STRING$(bits, "0")
-        '?ind(0), bit(0)
-        FOR rle = 1 TO tLen - 1
-          ind(rle) = ASC(INPUT$(1, #3))
-          bits = ASC(INPUT$(1, #3))
-          bit(rle) = BIN$((VAL("&b" + bit(rle - 1)) + 1) << (bits - LEN(bit(rle - 1))), bits)
-          '?ind(rle), bit(rle)
-        NEXT rle
-        INC fiPos, 1 + 2 * tLen
-
-        TUIwaitingProgress(dialog, 100 * fiPos / arcLen)
-
-        OPEN dest FOR OUTPUT AS #4
-        DO WHILE NOT EOF(#3)
-          FOR rle = 0 TO tLen - 1
-            IF LEN(bb) < LEN(bit(rle)) THEN
-              CAT bb, BIN$(ASC(INPUT$(1, #3)), 8)
-              INC fiPos
-            ENDIF
-            IF LEFT$(bb, LEN(bit(rle))) = bit(rle) THEN
-              ?#4, CHR$(ind(rle));
-              INC srcLen, -1
-              bb = MID$(bb, LEN(bit(rle)) + 1)
-              EXIT FOR
-            ENDIF
-          NEXT rle
-          TUIwaitingProgress(dialog, 100 * fiPos / arcLen)
-        LOOP
-        DO WHILE srcLen > 0
-          FOR rle = 0 TO tLen - 1
-            IF LEFT$(bb, LEN(bit(rle))) = bit(rle) THEN
-              ?#4, CHR$(ind(rle));
-              bb = MID$(bb, LEN(bit(rle)) + 1)
-              INC srcLen, -1
-              EXIT FOR
-            ENDIF
-          NEXT rle
-        LOOP
-        CLOSE #4        
-        TUIwaitingOFF(dialog)
-
-      CASE ELSE
-        TUIwarning("UNCOMPRESS ARC", "Decompression of '" + LEFT$(header,3) + "' not implemented yet")
-        CLOSE #3
-        EXIT SUB
-
-    END SELECT
-    CLOSE #3  
-    NCchangeDir(0,PATH.NC(0))
-    NCchangeDir(1,PATH.NC(1))
-    NCcursor(ACTIVE.NC,1)
-  ENDIF
-END SUB
-
-SUB NCmakeARC(source AS STRING)
-  'make CMM2 archive file (ARC)
-
-  LOCAL INTEGER srcLen = MM.INFO(FILESIZE source), arcLen = 0, rle, fiPos = 0, arcTypeInt = 1
-  LOCAL STRING header, prev, byt, buf
-  LOCAL STRING dest = NON_PATH.NC + NCgetNoExtension(NCgetName(source)) + ".ARC"
-
-  IF TUIquestion("COMPRESS TO ARC","Compress '" + NCgetName(source) + "' to '" + NCgetName(dest) + "' ?") THEN
-    'arcTypeInt = TUIchoice("ARC COMPRESS ALGORITHM","RLE - faster but not so universal,HUFMAN - slow but good")
-
-    SELECT CASE arcTypeInt
-      
-      CASE  0 '
-        'RLE, first archiver
-
-        LOCAL STRING dialog = TUIwaitingON("COMPRESS TO ARC")
-        TUIwaitingProgress(dialog, 0)
-        OPEN source FOR INPUT AS #3
-        OPEN dest FOR OUTPUT AS #4
-        header =  "RLE," + NCgetExtension(source) + "," + STR$(srcLen) '3 char archiver name, source extension, source size
-        INC arcLen, LEN(header) + 2
-        ?#4, header
-        buf = ""     
-        IF NOT EOF(#3) THEN      
-          byt = INPUT$(1, #3)
-          INC fiPos
-          prev = byt
-          rle = 0
-        ELSE
-          prev = ""
-        ENDIF
-        DO WHILE prev <> ""
-          TUIwaitingProgress(dialog, 100 * fiPos / srcLen)
-          IF byt = prev AND rle < 128 THEN
-            INC rle
-          ELSEIF rle > 1 OR rle = 128 THEN
-            IF buf <> "" THEN
-              ?#4, CHR$(LEN(buf) - 1) + buf;
-              INC arcLen, LEN(buf) + 1
-              buf = ""
-            ENDIF
-            ?#4, CHR$(128 + rle - 1) + prev;
-            INC arcLen, 2
-            rle = 1
-          ELSEIF rle = 1 THEN
-            IF LEN(buf) < 128 THEN
-              CAT buf, prev
-            ELSE
-              ?#4, CHR$(LEN(buf) - 1) + buf;
-              INC arcLen, LEN(buf) + 1
-              buf = prev
-            ENDIF
-            rle = 1
-          ENDIF
-          prev = byt
-          IF NOT EOF(#3) THEN
-            byt = INPUT$(1, #3) 
-            INC fiPos
-          ELSE
-            byt = ""
-          ENDIF
-        LOOP
-        IF buf <> "" THEN
-          ?#4, CHR$(LEN(buf) - 1) + buf;
-          INC arcLen, LEN(buf) + 1    
-          buf = ""
-        ENDIF    
-        CLOSE #4 
-        CLOSE #3  
-        TUIwaitingOFF(dialog)
-      
-      CASE 1
-        'HUFFMAN, slow but good
-        LOCAL INTEGER i, ind, cnt = -1, fr, dif, change
-        LOCAL INTEGER q(255), qq(255), nc, nn = 255, tind = -1
-        LOCAL STRING bit(255), tree(255), bb
-        LOCAL STRING dialog = TUIwaitingON("COMPRESS TO ARC")
-
-        TUIwaitingProgress(dialog, 0)
-        dif = 0
-        OPEN source FOR INPUT AS #3
-        DO WHILE NOT EOF(#3)
-        ind = ASC(INPUT$(1, #3))
-        fr = q(ind) >> 16
-        INC fr
-        INC dif
-        q(ind) = (fr << 16) + ind
-        TUIwaitingProgress(dialog, 40 * dif / srcLen)
-        LOOP
-        CLOSE #3 
-        FOR i = 0 TO 255
-        IF q(i) > 0 THEN
-          INC cnt
-          qq(cnt) = q(i)
-        ENDIF
-        NEXT i
-        SORT qq(), , 1, , cnt+1
-        dif = cnt
-
-        nc = cnt
-        DO WHILE nc > 0
-        fr = (qq(nc) >> 16) + (qq(nc-1) >> 16)
-
-        INC tind
-        ind = qq(nc) AND &hFFFF
-        IF ind < 256 THEN
-          tree(tind) = CHR$(ind)
-          bit(ind) = "0" + bit(ind)
-        ELSE
-          FOR i = 1 TO LEN(tree(ind - 256))
-          bit(ASC(MID$(tree(ind - 256),i,1))) = "0" + bit(ASC(MID$(tree(ind - 256),i,1)))
-          NEXT i
-          tree(tind) = tree(ind - 256)
-        ENDIF
-        ind = qq(nc-1) AND &hFFFF
-        IF ind < 256 THEN
-          tree(tind) = tree(tind) + CHR$(ind)
-          bit(ind) = "1" + bit(ind)
-        ELSE
-          FOR i = 1 TO LEN(tree(ind - 256))
-          bit(ASC(MID$(tree(ind - 256),i,1))) = "1" + bit(ASC(MID$(tree(ind - 256),i,1)))
-          NEXT i
-          tree(tind) = tree(tind) + tree(ind - 256)
-        ENDIF
-
-        INC nc, -1
-        INC nn
-        qq(nc) = (fr << 16) + nn    
-        SORT qq(), , 1, , nc+1
-        LOOP
-        TUIwaitingProgress(dialog, 45)
-
-
-        LOCAL STRING tbl(cnt) LENGTH 32
-        LOCAL INTEGER tblInd(cnt)
-        ind = cnt
-        FOR i=0 TO 255
-        IF q(i) > 0 THEN
-          tblInd(ind) = q(i) AND &hFFFF
-          tbl(ind) = bit(tblInd(ind))
-          INC ind, -1
-        ENDIF
-        NEXT i
-
-        change = 1
-        DO WHILE change
-        change = 0
-        FOR i = 1 TO cnt
-          IF LEN(tbl(i)) < LEN(tbl(i - 1)) THEN
-          NULL_S.NC = tbl(i)
-          tbl(i) = tbl(i - 1)
-          tbl(i - 1) = NULL_S.NC
-          NULL_I.NC = tblInd(i)
-          tblInd(i) = tblInd(i - 1)
-          tblInd(i - 1) = NULL_I.NC
-          change = 1
-          ELSEIF LEN(tbl(i)) = LEN(tbl(i - 1)) THEN
-          IF tbl(i) < tbl(i - 1) THEN
-            NULL_S.NC = tbl(i)
-            tbl(i) = tbl(i - 1)
-            tbl(i - 1) = NULL_S.NC
-            NULL_I.NC = tblInd(i)
-            tblInd(i) = tblInd(i - 1)
-            tblInd(i - 1) = NULL_I.NC
-            change = 1
-          ENDIF
-          ENDIF
-        NEXT i
-        LOOP
-        TUIwaitingProgress(dialog, 48)
-
-        OPEN dest FOR OUTPUT AS #4
-        header =  "HUF," + NCgetExtension(source) + "," + STR$(srcLen) '3 char archiver name, source extension, source size
-        INC arcLen, LEN(header) + 2
-        ?#4, header
-
-        'write huffman table n, n*(ASC, number of bits)
-        tbl(0) = STRING$(LEN(tbl(0)), "0")
-        bit(tblInd(0)) = tbl(0)
-        ?#4, CHR$(cnt+1)CHR$(tblInd(0))CHR$(LEN(tbl(0)));
-        FOR i = 1 TO cnt
-        ind = VAL("&b" + tbl(i - 1)) + 1
-        bb = BIN$(ind, LEN(tbl(i - 1)))    
-        tbl(i) = bb + STRING$(LEN(tbl(i)) - LEN(tbl(i - 1)), "0")
-        bit(tblInd(i)) = tbl(i)
-        ?#4, CHR$(tblInd(i))CHR$(LEN(tbl(i)));
-        NEXT i
-
-        TUIwaitingProgress(dialog, 50)  
-        bb = ""
-        cnt = 0
-        OPEN source FOR INPUT AS #3
-        DO WHILE NOT EOF(#3)
-        ind = ASC(INPUT$(1, #3))
-        INC cnt
-        bb = bb + bit(ind)
-        DO WHILE LEN(bb) > 7
-          ?#4,CHR$(VAL("&b" + LEFT$(bb, 8)));
-          bb = MID$(bb, 9)
-        LOOP
-        TUIwaitingProgress(dialog, 50 + 50 * cnt / srcLen)  
-        LOOP
-        IF bb <> "" THEN
-        IF LEN(bb) < 8 THEN
-          bb = bb + STRING$(8 - LEN(bb), "0")
-        ENDIF
-        DO WHILE LEN(bb) > 7
-          ?#4,CHR$(VAL("&b" + bb));
-          bb = MID$(bb, 9)
-        LOOP
-        ENDIF
-        CLOSE #3 
-
-        CLOSE #4
-        TUIwaitingOFF(dialog)        huf(source, dest)
-
-    END SELECT
-    NCchangeDir(0,PATH.NC(0))
-    NCchangeDir(1,PATH.NC(1))
-    NCcursor(ACTIVE.NC,1)
-  ENDIF
 END SUB
 
 SUB NCcopyDir(source AS STRING, dest AS STRING, noWarning AS INTEGER)
@@ -4351,7 +3917,7 @@ SUB NCinitMenu
     NCsetMenu(1, "Source Left Pane", 1, 1)
     NCsetMenu(2, "Source Right Pane", 1, 1)
     NCsetMenu(3, "HEX viewer", 1, 1)
-    NCsetMenu(4, "BASIC Help", 1, 1)
+    NCsetMenu(4, "PROPORTIONAL view", 1, 1)
     NCsetMenu(5, "Move File", 1, 1)
     NCsetMenu(6, "Rename File", 1, 1)
     NCsetMenu(7, "New Directory", 1, 1)
@@ -4378,7 +3944,7 @@ SUB NCinitMenu
     NCsetMenu(1, "Source LP", 1, 1)
     NCsetMenu(2, "Source RP", 1, 1)
     NCsetMenu(3, "HEX viewer", 1, 1)
-    NCsetMenu(4, "BASIC Help", 1, 1)
+    NCsetMenu(4, "PROP viewer", 1, 1)
     NCsetMenu(5, "Move File", 1, 1)
     NCsetMenu(6, "Rename File", 1, 1)
     NCsetMenu(7, "New Dir", 1, 1)
@@ -4404,8 +3970,8 @@ SUB NCinitMenu
     NCsetMenu(12,"LPa=RPa", 0, 1)
     NCsetMenu(1, "SourceLP", 1, 1)
     NCsetMenu(2, "SourceRP", 1, 1)
-    NCsetMenu(3, "Viev HEX", 1, 1)
-    NCsetMenu(4, "Hlp BAS", 1, 1)
+    NCsetMenu(3, "View HEX", 1, 1)
+    NCsetMenu(4, "ViewPROP", 1, 1)
     NCsetMenu(5, "MoveFile", 1, 1)
     NCsetMenu(6, "Rename", 1, 1)
     NCsetMenu(7, "New Dir", 1, 1)
@@ -4432,7 +3998,7 @@ SUB NCinitMenu
     NCsetMenu(1, "SourLP", 1, 1)
     NCsetMenu(2, "SourRP", 1, 1)
     NCsetMenu(3, "VieHEX", 1, 1)
-    NCsetMenu(4, "HlpBAS", 1, 1)
+    NCsetMenu(4, "ViePRP", 1, 1)
     NCsetMenu(5, "Move", 1, 1)
     NCsetMenu(6, "Rename", 1, 1)
     NCsetMenu(7, "NewDir", 1, 1)
@@ -4542,7 +4108,7 @@ SUB NCconfig
         ENDIF
 
       CASE 6
-        sel2 = TUIchoice("SERIAL SERVER speed", "691200 baud,230400 baud")
+        sel2 = TUIchoice("SERIAL SERVER speed", "230400 baud,691200 baud")
         IF sel2>=0 THEN
           CFG_FastSerial.NC = sel2
         ENDIF
@@ -4781,3 +4347,526 @@ FUNCTION NCgetResFromMode(m AS INTEGER) AS STRING
   ENDIF
 END FUNCTION
     
+SUB NCmakeARC(source AS STRING)
+  'make CMM2 archive file (ARC)
+
+  LOCAL INTEGER srcLen = MM.INFO(FILESIZE source), arcLen = 0, rle, fiPos = 0, arcTypeInt = 1
+  LOCAL STRING header, prev, byt, buf
+  LOCAL STRING dest = NON_PATH.NC + NCgetNoExtension(NCgetName(source)) + ".ARC"
+
+  IF TUIquestion("COMPRESS TO ARC","Compress '" + NCgetName(source) + "' to '" + NCgetName(dest) + "' ?") THEN
+    arcTypeInt = TUIchoice("ARC COMPRESS ALGORITHM","RLE - faster but not so universal,HUFMAN - slow but good")
+
+    SELECT CASE arcTypeInt
+      
+      CASE  0 '
+        'RLE, first archiver
+
+        DBG NCoutDebug("ARC start (RLE)")
+        LOCAL STRING dialog = TUIwaitingON("COMPRESS TO ARC")
+        TUIwaitingProgress(dialog, 0)
+        OPEN source FOR INPUT AS #3
+        OPEN dest FOR OUTPUT AS #4
+        header =  "RLE," + NCgetExtension(source) + "," + STR$(srcLen) '3 char archiver name, source extension, source size
+        INC arcLen, LEN(header) + 2
+        ?#4, header
+        buf = ""     
+        IF NOT EOF(#3) THEN      
+          byt = INPUT$(1, #3)
+          INC fiPos
+          prev = byt
+          rle = 0
+        ELSE
+          prev = ""
+        ENDIF
+        DO WHILE prev <> ""
+          TUIwaitingProgress(dialog, 100 * fiPos / srcLen)
+          IF byt = prev AND rle < 128 THEN
+            INC rle
+          ELSEIF rle > 1 OR rle = 128 THEN
+            IF buf <> "" THEN
+              ?#4, CHR$(LEN(buf) - 1) + buf;
+              INC arcLen, LEN(buf) + 1
+              buf = ""
+            ENDIF
+            ?#4, CHR$(128 + rle - 1) + prev;
+            INC arcLen, 2
+            rle = 1
+          ELSEIF rle = 1 THEN
+            IF LEN(buf) < 128 THEN
+              CAT buf, prev
+            ELSE
+              ?#4, CHR$(LEN(buf) - 1) + buf;
+              INC arcLen, LEN(buf) + 1
+              buf = prev
+            ENDIF
+            rle = 1
+          ENDIF
+          prev = byt
+          IF NOT EOF(#3) THEN
+            byt = INPUT$(1, #3) 
+            INC fiPos
+          ELSE
+            byt = ""
+          ENDIF
+        LOOP
+        IF buf <> "" THEN
+          ?#4, CHR$(LEN(buf) - 1) + buf;
+          INC arcLen, LEN(buf) + 1    
+          buf = ""
+        ENDIF    
+        CLOSE #4 
+        CLOSE #3  
+        TUIwaitingOFF(dialog)
+      
+      CASE 1
+        'HUFFMAN, slow but good
+
+        DBG NCoutDebug("ARC start (HUF)")
+        LOCAL INTEGER i, ind, cnt = -1, fr, dif, change
+        LOCAL INTEGER q(255), qq(255), nc, nn = 255, tind = -1
+        LOCAL STRING bit(255), tree(255), bb
+        LOCAL STRING dialog = TUIwaitingON("COMPRESS TO ARC")
+
+        TUIwaitingProgress(dialog, 0)
+        dif = 0
+        OPEN source FOR INPUT AS #3
+          DO WHILE NOT EOF(#3)
+          ind = ASC(INPUT$(1, #3))
+          fr = q(ind) >> 16
+          INC fr
+          INC dif
+          q(ind) = (fr << 16) + ind
+          TUIwaitingProgress(dialog, 40 * dif / srcLen)
+        LOOP
+        CLOSE #3 
+        FOR i = 0 TO 255
+          IF q(i) > 0 THEN
+            INC cnt
+            qq(cnt) = q(i)
+          ENDIF
+        NEXT i
+        SORT qq(), , 1, , cnt+1
+        dif = cnt
+
+        nc = cnt
+        DO WHILE nc > 0
+          fr = (qq(nc) >> 16) + (qq(nc-1) >> 16)
+
+          INC tind
+          ind = qq(nc) AND &hFFFF
+          IF ind < 256 THEN
+            tree(tind) = CHR$(ind)
+            bit(ind) = "0" + bit(ind)
+          ELSE
+            FOR i = 1 TO LEN(tree(ind - 256))
+              bit(ASC(MID$(tree(ind - 256),i,1))) = "0" + bit(ASC(MID$(tree(ind - 256),i,1)))
+            NEXT i
+            tree(tind) = tree(ind - 256)
+          ENDIF
+          ind = qq(nc-1) AND &hFFFF
+          IF ind < 256 THEN
+            tree(tind) = tree(tind) + CHR$(ind)
+            bit(ind) = "1" + bit(ind)
+          ELSE
+            FOR i = 1 TO LEN(tree(ind - 256))
+              bit(ASC(MID$(tree(ind - 256),i,1))) = "1" + bit(ASC(MID$(tree(ind - 256),i,1)))
+            NEXT i
+            tree(tind) = tree(tind) + tree(ind - 256)
+          ENDIF
+
+          INC nc, -1
+          INC nn
+          qq(nc) = (fr << 16) + nn    
+          SORT qq(), , 1, , nc+1
+        LOOP
+        TUIwaitingProgress(dialog, 45)
+
+
+        LOCAL STRING tbl(cnt) LENGTH 32
+        LOCAL INTEGER tblInd(cnt)
+        ind = cnt
+        FOR i=0 TO 255
+          IF q(i) > 0 THEN
+            tblInd(ind) = q(i) AND &hFFFF
+            tbl(ind) = bit(tblInd(ind))
+            INC ind, -1
+          ENDIF
+        NEXT i
+
+        change = 1
+        DO WHILE change
+          change = 0
+          FOR i = 1 TO cnt
+            IF LEN(tbl(i)) < LEN(tbl(i - 1)) THEN
+            NULL_S.NC = tbl(i)
+            tbl(i) = tbl(i - 1)
+            tbl(i - 1) = NULL_S.NC
+            NULL_I.NC = tblInd(i)
+            tblInd(i) = tblInd(i - 1)
+            tblInd(i - 1) = NULL_I.NC
+            change = 1
+            ELSEIF LEN(tbl(i)) = LEN(tbl(i - 1)) THEN
+              IF tbl(i) < tbl(i - 1) THEN
+                NULL_S.NC = tbl(i)
+                tbl(i) = tbl(i - 1)
+                tbl(i - 1) = NULL_S.NC
+                NULL_I.NC = tblInd(i)
+                tblInd(i) = tblInd(i - 1)
+                tblInd(i - 1) = NULL_I.NC
+                change = 1
+              ENDIF
+            ENDIF
+          NEXT i
+        LOOP
+        TUIwaitingProgress(dialog, 48)
+
+        OPEN dest FOR OUTPUT AS #4
+        header =  "HUF," + NCgetExtension(source) + "," + STR$(srcLen) '3 char archiver name, source extension, source size
+        INC arcLen, LEN(header) + 2
+        ?#4, header
+
+        'write huffman table n, n*(ASC, number of bits)
+        tbl(0) = STRING$(LEN(tbl(0)), "0")
+        bit(tblInd(0)) = tbl(0)
+        ?#4, CHR$(cnt+1)CHR$(tblInd(0))CHR$(LEN(tbl(0)));
+        FOR i = 1 TO cnt
+          ind = VAL("&b" + tbl(i - 1)) + 1
+          bb = BIN$(ind, LEN(tbl(i - 1)))    
+          tbl(i) = bb + STRING$(LEN(tbl(i)) - LEN(tbl(i - 1)), "0")
+          bit(tblInd(i)) = tbl(i)
+          ?#4, CHR$(tblInd(i))CHR$(LEN(tbl(i)));
+        NEXT i
+
+        TUIwaitingProgress(dialog, 50)  
+        bb = ""
+        cnt = 0
+        OPEN source FOR INPUT AS #3
+        DO WHILE NOT EOF(#3)
+          ind = ASC(INPUT$(1, #3))
+          INC cnt
+          bb = bb + bit(ind)
+          DO WHILE LEN(bb) > 7
+            ?#4,CHR$(VAL("&b" + LEFT$(bb, 8)));
+            bb = MID$(bb, 9)
+          LOOP
+          TUIwaitingProgress(dialog, 50 + 50 * cnt / srcLen)  
+        LOOP
+        IF bb <> "" THEN
+          IF LEN(bb) < 8 THEN
+            bb = bb + STRING$(8 - LEN(bb), "0")
+          ENDIF
+          DO WHILE LEN(bb) > 7
+            ?#4,CHR$(VAL("&b" + bb));
+            bb = MID$(bb, 9)
+          LOOP
+        ENDIF
+        CLOSE #3 
+
+        CLOSE #4
+        TUIwaitingOFF(dialog)
+
+    END SELECT
+    DBG NCoutDebug("ARC finished")
+
+    NCchangeDir(0,PATH.NC(0))
+    NCchangeDir(1,PATH.NC(1))
+    NCcursor(ACTIVE.NC,1)
+  ENDIF
+END SUB
+
+SUB NCunARC(source AS STRING)
+  'decompress CMM2 archive file (ARC)
+
+  LOCAL INTEGER arcLen = MM.INFO(FILESIZE source), srcLen = 0, rle, fiPos = 0, i
+  LOCAL STRING header, prev
+  LOCAL STRING dest = NON_PATH.NC + NCgetNoExtension(NCgetName(source))
+
+  IF TUIquestion("UNCOMPRESS ARC","Uncompress '" + NCgetName(source) + "' to '" + NON_PATH.NC + "' ?") THEN
+    
+    OPEN source FOR INPUT AS #3
+    LINE INPUT #3, header
+    srcLen = VAL(FIELD$(header, 3, ","))
+    INC fiPos, 2 + LEN(header)
+    CAT dest, "." + FIELD$(header, 2, ",")    
+    SELECT CASE LEFT$(header, 3)
+      CASE "RLE"
+        'RLE, first archiver
+
+        DBG NCoutDebug("unARC start (RLE)")
+        LOCAL STRING dialog = TUIwaitingON("UNCOMPRESS ARC (RLE)")
+        TUIwaitingProgress(dialog, 0)
+        OPEN dest FOR OUTPUT AS #4
+        DO WHILE NOT EOF(#3)
+          rle = ASC(INPUT$(1, #3))
+          INC fiPos
+          IF rle < 128 THEN
+            'raw data
+            INC fiPos, rle + 1
+            INC srcLen, rle + 1
+            
+            FOR i = 1 TO rle + 1
+              ?#4,INPUT$(1, #3);
+            NEXT i
+
+          ELSE
+            'compressed data
+            prev = INPUT$(1, #3)
+            INC srcLen, rle - 127
+            INC fiPos
+            FOR i = 1 TO rle - 127
+              ?#4,prev;
+            NEXT i
+          ENDIF
+
+          TUIwaitingProgress(dialog, 100 * fiPos / arcLen)
+        LOOP
+        CLOSE #4 
+        TUIwaitingOFF(dialog)
+    
+      CASE "HUF"
+        'HUFFMAN, slow :-(
+
+        DBG NCoutDebug("unARC start (HUF)")
+        LOCAL STRING dialog = TUIwaitingON("UNCOMPRESS ARC (HUF)")
+        LOCAL INTEGER tLen = ASC(INPUT$(1, #3))
+        LOCAL STRING bit(tLen - 1), bb = ""
+        LOCAL INTEGER ind(tLen - 1), bits
+
+        TUIwaitingProgress(dialog, 0)
+
+        ind(0) = ASC(INPUT$(1, #3))
+        bits = ASC(INPUT$(1, #3))
+        bit(0) = STRING$(bits, "0")
+        '?ind(0), bit(0)
+        FOR rle = 1 TO tLen - 1
+          ind(rle) = ASC(INPUT$(1, #3))
+          bits = ASC(INPUT$(1, #3))
+          bit(rle) = BIN$((VAL("&b" + bit(rle - 1)) + 1) << (bits - LEN(bit(rle - 1))), bits)
+          '?ind(rle), bit(rle)
+        NEXT rle
+        DBG NCoutDebug("unARC HUF table read")
+        INC fiPos, 1 + 2 * tLen
+
+        TUIwaitingProgress(dialog, 100 * fiPos / arcLen)
+
+        OPEN dest FOR OUTPUT AS #4
+        DO WHILE NOT EOF(#3)
+          FOR rle = 0 TO tLen - 1
+            IF LEN(bb) < LEN(bit(rle)) THEN
+              CAT bb, BIN$(ASC(INPUT$(1, #3)), 8)
+              INC fiPos
+            ENDIF
+            IF LEFT$(bb, LEN(bit(rle))) = bit(rle) THEN
+              ?#4, CHR$(ind(rle));
+              INC srcLen, -1
+              bb = MID$(bb, LEN(bit(rle)) + 1)
+              EXIT FOR
+            ENDIF
+          NEXT rle
+          TUIwaitingProgress(dialog, 100 * fiPos / arcLen)
+        LOOP
+
+        DBG NCoutDebug("unARC padding start")
+        DO WHILE srcLen > 0
+          FOR rle = 0 TO tLen - 1
+            IF LEFT$(bb, LEN(bit(rle))) = bit(rle) THEN
+              ?#4, CHR$(ind(rle));
+              bb = MID$(bb, LEN(bit(rle)) + 1)
+              INC srcLen, -1
+              EXIT FOR
+            ENDIF
+          NEXT rle
+        LOOP
+        CLOSE #4        
+        TUIwaitingOFF(dialog)
+
+      CASE ELSE
+        TUIwarning("UNCOMPRESS ARC", "Decompression of '" + LEFT$(header,3) + "' not implemented yet")
+        CLOSE #3
+        EXIT SUB
+
+    END SELECT
+    CLOSE #3  
+
+    DBG NCoutDebug("unARC finished")
+
+    NCchangeDir(0,PATH.NC(0))
+    NCchangeDir(1,PATH.NC(1))
+    NCcursor(ACTIVE.NC,1)
+  ENDIF
+END SUB
+
+SUB NCviewTXT(filePath AS STRING)
+  'simple text viewer
+
+  CLOCK.NC = 2
+  NCviewBackground(filePath)
+  CONST lineLength = (MM.HRES \ 8) - 1
+  CONST white = CHR$(8) + CHR$(10) + CHR$(13) + CHR$(32)
+  LOCAL INTEGER firstRow = 16 + OFFSET.NC, filePos = 0, fileSize = MM.INFO(FILESIZE filePath)
+  LOCAL INTEGER maxRow = 0, maxPages, indent = (MM.HRES - 8*lineLength) \ 2
+  LOCAL STRING oneLine = "", ch, k = "", mxp="?"
+  LOCAL INTEGER pages(1000), cntPage = 1, cntChar = 1, change = 0
+
+  pages(cntPage) = cntChar  
+  maxPages = cntPage
+  cntPage = 1
+  DO
+    change = 0
+    maxRow = 0
+    BOX 0, 16, MM.HRES, WITHOUT2.NC, 0,, RGB(CYAN)
+    TEXT HALF.NC, MM.VRES-16, " Page " + STR$(cntPage) + "/" + mxp + " ","CT", 8,, RGB(WHITE), RGB(NOTBLACK)
+
+    oneLine = ""
+    OPEN filePath FOR RANDOM AS #3
+      filePos = pages(cntPage)
+      SEEK #3, filePos
+      DO WHILE maxRow<EDIT_ROWS.NC AND filePos<=fileSize
+        ch = INPUT$(1, #3)
+        INC filePos
+        IF ch = LF.NC THEN
+          TEXT indent, firstRow + 16 * maxRow, oneLine, "LT", 8,, RGB(NOTBLACK), RGB(CYAN)
+          oneLine = ""
+          INC maxRow
+
+        ELSEIF ch <> CR.NC THEN
+          IF LEN(oneLine) < lineLength THEN
+            CAT oneLine, ch
+          ELSE
+            TEXT indent, firstRow + 16 * maxRow, oneLine, "LT", 8,, RGB(NOTBLACK), RGB(CYAN)
+            oneLine = ch
+            INC maxRow
+          ENDIF
+        ENDIF
+      LOOP               
+    CLOSE #3
+    IF oneLine<>"" AND maxRow<EDIT_ROWS.NC THEN
+      TEXT indent, firstRow + 16 * maxRow, oneLine, "LT", 8,, RGB(NOTBLACK), RGB(CYAN)
+    ENDIF
+
+    IF filePos<=fileSize THEN
+      IF maxPages=cntPage THEN
+        maxPages = cntPage + 1
+        pages(maxPages) = filePos
+      ENDIF
+    ELSE
+      mxp = STR$(maxPages)
+      TEXT HALF.NC, MM.VRES-16, " Page " + STR$(cntPage) + "/" + mxp + " ","CT", 8,, RGB(WHITE), RGB(NOTBLACK)
+    ENDIF
+
+    DO WHILE change = 0 AND k<>ESC.NC
+      DO: k = INKEY$: LOOP WHILE k = ""
+      IF k = CHR$(136) THEN
+        'Page UP
+        IF cntPage > 1 THEN 
+          INC cntPage, -1
+          change = 1
+        ENDIF
+
+      ELSEIF k = CHR$(137) THEN
+        'Page DOWN
+        IF cntPage < maxPages THEN 
+          INC cntPage, 1
+          change = 1
+        ENDIF
+      ENDIF
+    LOOP
+
+  LOOP WHILE k<>ESC.NC
+  NCredrawPane(0)
+  NCredrawPane(1)  
+  NCcursor(ACTIVE.NC,1)
+  NCdrawMenu
+END SUB
+
+SUB NCviewPROP(filePath AS STRING)
+  'simple PROPORTIONAL text viewer
+
+  CLOCK.NC = 2
+  initFont.PROP(8)
+  font.PROP(8)
+  color.PROP(RGB(NOTBLACK), RGB(CYAN))
+
+  NCviewBackground(filePath)
+  CONST lineLength = MM.HRES - 8
+  CONST white = CHR$(8) + CHR$(10) + CHR$(13) + CHR$(32)
+  LOCAL INTEGER firstRow = 16 + OFFSET.NC, filePos = 0, fileSize = MM.INFO(FILESIZE filePath)
+  LOCAL INTEGER maxRow = 0, maxPages, indent = (MM.HRES - lineLength) \ 2
+  LOCAL STRING oneLine = "", ch, k = "", mxp="?"
+  LOCAL INTEGER pages(1000), cntPage = 1, cntChar = 1, change = 0
+
+  pages(cntPage) = cntChar  
+  maxPages = cntPage
+  cntPage = 1
+  DO
+    CLOCK.NC = 0
+
+    change = 0
+    maxRow = 0
+    BOX 0, 16, MM.HRES, WITHOUT2.NC, 0,, RGB(CYAN)
+    TEXT HALF.NC, MM.VRES-16, " Page " + STR$(cntPage) + "/" + mxp + " ","CT", 8,, RGB(WHITE), RGB(NOTBLACK)
+
+    oneLine = ""
+    OPEN filePath FOR RANDOM AS #3
+      filePos = pages(cntPage)
+      SEEK #3, filePos
+      DO WHILE maxRow<EDIT_ROWS.NC AND filePos<=fileSize
+        ch = INPUT$(1, #3)
+        INC filePos
+
+        IF ch = LF.NC THEN
+          ?@(indent, firstRow + 16*maxRow);:justifyLine.PROP(oneLine, lineLength, indent)
+          INC maxRow
+
+        ELSEIF ch <> CR.NC THEN
+          IF LEN(oneLine)<200 THEN
+            CAT oneLine, ch
+          ELSE
+            ?@(indent, firstRow + 16*maxRow);:justifyLine.PROP(oneLine, lineLength, indent)
+            CAT oneLine, ch
+            INC maxRow
+          ENDIF
+        ENDIF
+      LOOP               
+    CLOSE #3
+    IF oneLine<>"" AND maxRow<EDIT_ROWS.NC THEN
+      ?@(indent, firstRow + 16*maxRow);:justifyLine.PROP(oneLine, lineLength, indent)
+    ENDIF
+
+    IF filePos<=fileSize THEN
+      IF maxPages=cntPage THEN
+        maxPages = cntPage + 1
+        pages(maxPages) = filePos
+      ENDIF
+    ELSE
+      mxp = STR$(maxPages)
+      TEXT HALF.NC, MM.VRES-16, " Page " + STR$(cntPage) + "/" + mxp + " ","CT", 8,, RGB(WHITE), RGB(NOTBLACK)
+    ENDIF
+
+    CLOCK.NC = 2
+    DO WHILE change = 0 AND k<>ESC.NC
+      DO: k = INKEY$: LOOP WHILE k = ""
+      IF k = CHR$(136) THEN
+        'Page UP
+        IF cntPage > 1 THEN 
+          INC cntPage, -1
+          change = 1
+        ENDIF
+
+      ELSEIF k = CHR$(137) THEN
+        'Page DOWN
+        IF cntPage < maxPages THEN 
+          INC cntPage, 1
+          change = 1
+        ENDIF
+      ENDIF
+    LOOP
+
+  LOOP WHILE k<>ESC.NC
+  NCredrawPane(0)
+  NCredrawPane(1)  
+  NCcursor(ACTIVE.NC,1)
+  NCdrawMenu
+END SUB
+
