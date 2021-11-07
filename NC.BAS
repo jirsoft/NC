@@ -4219,7 +4219,7 @@ FUNCTION NCprepareConfig() AS STRING
 
   CAT NCprepareConfig, ",Display MODE "
   IF CFG_DefaultMode.NC THEN
-     CAT NCprepareConfig, "[" + NCgetResFromMode() + "]"
+     CAT NCprepareConfig, "[" + NCgetResFromMode(CFG_DefaultMode.NC) + "]"
   ELSE
     CAT NCprepareConfig, "[current]"
   ENDIF
